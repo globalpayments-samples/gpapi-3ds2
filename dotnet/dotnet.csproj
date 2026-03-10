@@ -7,7 +7,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="GlobalPayments.Api" Version="9.0.16" />
     <PackageReference Include="DotEnv.Net" Version="3.2.1" />
   </ItemGroup>
 

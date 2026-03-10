@@ -28,6 +28,6 @@ RUN addgroup -g 1001 -S javauser && \
     adduser -S javauser -u 1001
 USER javauser
 
-EXPOSE 8000
+EXPOSE 8080
 
 CMD ["mvn", "cargo:run", "-Dquiet"]

@@ -1,0 +1,36 @@
+# Environment / credentials — never commit
+.env
+**/.env
+
+# AI assistant brain files — internal use only
+CLAUDE.md
+**/CLAUDE.md
+.claude/
+
+# Node.js
+node_modules/
+**/node_modules/
+npm-debug.log*
+
+# PHP
+**/vendor/
+php/composer.lock
+
+# .NET
+**/bin/
+**/obj/
+*.user
+
+# Java / Maven
+**/target/
+*.class
+*.war
+*.jar
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test artefacts
+test-results/
+playwright-report/

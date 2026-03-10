@@ -3,11 +3,139 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Global Payments - Developer Example</title>
+    <title>Global Payments — GP-API 3DS2 Sandbox Tester</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://globalpayments-samples.github.io/css/styles.csscss/styles.css">
+    <style>
+        /* 3DS2-specific additions — no overrides to base design */
+        .step-panel { display: none; }
+        .step-panel.active { display: block; }
+
+        .flow-steps {
+            display: flex;
+            gap: 4px;
+            margin-bottom: 24px;
+            flex-wrap: wrap;
+        }
+        .flow-step {
+            flex: 1;
+            min-width: 80px;
+            padding: 8px 6px;
+            border-radius: 6px;
+            background: #f5f5f5;
+            text-align: center;
+            font-size: 12px;
+            font-weight: 600;
+            color: #888;
+            border: 2px solid transparent;
+        }
+        .flow-step.active  { background: #e8f4fd; border-color: #2196F3; color: #1565c0; }
+        .flow-step.done    { background: #e8f5e9; border-color: #4CAF50; color: #2e7d32; }
+        .flow-step.error   { background: #fdecea; border-color: #f44336; color: #b71c1c; }
+
+        .test-cards-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+            gap: 8px;
+            margin-bottom: 16px;
+        }
+        .test-card-btn {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 10px 12px;
+            cursor: pointer;
+            text-align: left;
+            font-family: inherit;
+            transition: background 0.15s, border-color 0.15s;
+        }
+        .test-card-btn:hover { background: #e9f5fb; border-color: #90caf9; }
+        .test-card-btn .card-num  { font-size: 13px; font-weight: 700; letter-spacing: 1px; font-family: monospace; }
+        .test-card-btn .card-label { font-size: 11px; color: #666; margin-top: 2px; }
+        .test-card-btn .card-badge {
+            display: inline-block;
+            font-size: 10px;
+            font-weight: 700;
+            padding: 2px 6px;
+            border-radius: 4px;
+            margin-top: 4px;
+        }
+        .badge-success { background: #c8e6c9; color: #1b5e20; }
+        .badge-challenge { background: #fff9c4; color: #f57f17; }
+        .badge-fail { background: #ffcdd2; color: #b71c1c; }
+        .badge-unavail { background: #f3e5f5; color: #6a1b9a; }
+
+        .raw-toggle {
+            background: none;
+            border: 1px solid #dee2e6;
+            border-radius: 6px;
+            padding: 4px 10px;
+            cursor: pointer;
+            font-size: 12px;
+            color: #666;
+            margin-top: 8px;
+        }
+        .raw-toggle:hover { background: #f5f5f5; }
+
+        .raw-response {
+            display: none;
+            background: #1e1e1e;
+            color: #d4d4d4;
+            border-radius: 8px;
+            padding: 16px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            overflow-x: auto;
+            white-space: pre;
+            margin-top: 8px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .raw-response.visible { display: block; }
+
+        .acs-modal {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.6);
+            z-index: 9999;
+            align-items: center;
+            justify-content: center;
+        }
+        .acs-modal.open { display: flex; }
+        .acs-modal-inner {
+            background: white;
+            border-radius: 12px;
+            padding: 24px;
+            width: 90vw;
+            max-width: 520px;
+            max-height: 90vh;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+        .acs-modal-inner iframe {
+            width: 100%;
+            height: 500px;
+            border: 1px solid #dee2e6;
+            border-radius: 6px;
+        }
+
+        .step-result {
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin-top: 12px;
+            font-size: 13px;
+        }
+        .step-result.ok    { background: #e8f5e9; border-left: 4px solid #4CAF50; }
+        .step-result.warn  { background: #fff9c4; border-left: 4px solid #FFC107; }
+        .step-result.err   { background: #fdecea; border-left: 4px solid #f44336; }
+        .step-result dl    { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; margin: 6px 0 0; }
+        .step-result dt    { font-weight: 600; white-space: nowrap; }
+        .step-result dd    { margin: 0; word-break: break-all; font-family: monospace; font-size: 12px; }
+    </style>
 </head>
 <body>
     <!-- Header -->
@@ -31,183 +159,540 @@
 
     <div class="gp-container">
         <!-- Page Title -->
-        <h1 class="gp-page-title">SDK Integration Examples</h1>
-        <p class="gp-page-subtitle">Explore comprehensive examples of Global Payments SDK implementations across different payment scenarios.</p>
+        <h1 class="gp-page-title">GP-API 3DS2 Sandbox Tester</h1>
+        <p class="gp-page-subtitle">Full 3DS2 browser flow: enrollment check → authentication → challenge → payment authorisation.</p>
 
-        <!-- Tabs -->
-        <div class="gp-tabs">
-            <div class="gp-tab-list">
-                <button class="gp-tab-button active" data-tab="payment-form">Payment Form</button>
-                <button class="gp-tab-button" data-tab="tokenization">Tokenization</button>
-                <button class="gp-tab-button" data-tab="webhooks">Webhooks</button>
-                <button class="gp-tab-button" data-tab="recurring">Recurring Payments</button>
+        <!-- Backend Selector -->
+        <div class="gp-card" style="margin-bottom: 16px;">
+            <div style="display: flex; align-items: center; gap: 16px; flex-wrap: wrap;">
+                <label for="backend-selector" class="gp-label" style="margin: 0; white-space: nowrap;">Backend:</label>
+                <select id="backend-selector" class="gp-select" style="width: auto; min-width: 200px;">
+                    <option value="http://localhost:3001">Node.js (port 3001)</option>
+                    <option value="http://localhost:3003">PHP (port 3003)</option>
+                    <option value="http://localhost:3002">.NET (port 3002)</option>
+                    <option value="http://localhost:3004">Java (port 3004)</option>
+                </select>
+                <span id="health-status" style="font-size: 13px; color: #888;">checking…</span>
             </div>
+        </div>
 
-            <!-- Payment Form Tab -->
-            <div class="gp-tab-content active" id="payment-form">
-                <div class="gp-card">
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px; align-items: start;">
+
+            <!-- LEFT COLUMN: Form -->
+            <div>
+                <!-- Test Cards -->
+                <div class="gp-card" style="margin-bottom: 16px;">
                     <div class="gp-card-header">
-                        <h2 class="gp-card-title">Credit Card Payment Form</h2>
-                        <p class="gp-card-description">
-                            Secure payment processing using Global Payments tokenization with client-side form validation.
-                        </p>
+                        <h2 class="gp-card-title">Test Cards</h2>
+                        <p class="gp-card-description">Click to populate the form. All use expiry 12/2026, CVV 123.</p>
                     </div>
-                    
-                    <form id="payment-form" class="gp-form" action="/process-payment.php" method="POST">
-                        <div class="gp-form-group">
-                            <label for="amount" class="gp-label">Amount ($):</label>
-                            <input type="number" id="amount" name="amount" class="gp-input" min="0.01" step="0.01" value="10.00" required>
-                        </div>
-                        
-                        <div class="gp-form-group">
-                            <label for="billing_zip" class="gp-label">Billing Zip Code:</label>
-                            <input type="text" id="billing_zip" name="billing_zip" class="gp-input" placeholder="12345" required>
-                        </div>
-
-                        <div class="gp-form-group">
-                            <label class="gp-label">Credit Card Information:</label>
-                            <div id="credit-card"></div>
-                        </div>
-
-                        <button type="submit" class="gp-button gp-button-primary gp-button-full">
-                            Process Payment
+                    <div class="test-cards-grid">
+                        <button class="test-card-btn" onclick="fillCard('4263970000005262','12','2026','Frictionless Visa')">
+                            <div class="card-num">4263 9700 0000 5262</div>
+                            <div class="card-label">Visa</div>
+                            <span class="card-badge badge-success">Frictionless</span>
                         </button>
-                    </form>
-                </div>
-            </div>
-
-            <!-- Tokenization Tab -->
-            <div class="gp-tab-content" id="tokenization">
-                <div class="gp-card">
-                    <div class="gp-card-header">
-                        <h2 class="gp-card-title">Card Tokenization</h2>
-                        <p class="gp-card-description">
-                            Securely tokenize payment methods for future use without storing sensitive card data.
-                        </p>
-                    </div>
-                    
-                    <div class="gp-alert gp-alert-info">
-                        <strong>Info:</strong> Tokens can be stored securely and used for future transactions without handling raw card data.
-                    </div>
-
-                    <form id="tokenization-form" class="gp-form">
-                        <div class="gp-form-group">
-                            <label class="gp-label">Card Information for Tokenization:</label>
-                            <div id="credit-card-token"></div>
-                        </div>
-
-                        <button type="submit" class="gp-button gp-button-primary gp-button-full">
-                            Generate Token
+                        <button class="test-card-btn" onclick="fillCard('5425230000004415','12','2026','Frictionless MC')">
+                            <div class="card-num">5425 2300 0000 4415</div>
+                            <div class="card-label">Mastercard</div>
+                            <span class="card-badge badge-success">Frictionless</span>
                         </button>
-                    </form>
-
-                    <div id="token-result" class="gp-hidden">
-                        <h3 class="gp-card-title gp-mt-lg">Generated Token:</h3>
-                        <div class="gp-code-block" id="token-display"></div>
+                        <button class="test-card-btn" onclick="fillCard('4012001037141112','12','2026','Challenge Visa')">
+                            <div class="card-num">4012 0010 3714 1112</div>
+                            <div class="card-label">Visa</div>
+                            <span class="card-badge badge-challenge">Challenge</span>
+                        </button>
+                        <button class="test-card-btn" onclick="fillCard('5114610000004778','12','2026','Challenge MC')">
+                            <div class="card-num">5114 6100 0000 4778</div>
+                            <div class="card-label">Mastercard</div>
+                            <span class="card-badge badge-challenge">Challenge</span>
+                        </button>
+                        <button class="test-card-btn" onclick="fillCard('4012001036853337','12','2026','Auth Failed')">
+                            <div class="card-num">4012 0010 3685 3337</div>
+                            <div class="card-label">Visa</div>
+                            <span class="card-badge badge-fail">Auth Failed</span>
+                        </button>
+                        <button class="test-card-btn" onclick="fillCard('4012001036273338','12','2026','Unavailable')">
+                            <div class="card-num">4012 0010 3627 3338</div>
+                            <div class="card-label">Visa</div>
+                            <span class="card-badge badge-unavail">Unavailable</span>
+                        </button>
                     </div>
                 </div>
-            </div>
 
-            <!-- Webhooks Tab -->
-            <div class="gp-tab-content" id="webhooks">
+                <!-- Payment Form -->
                 <div class="gp-card">
                     <div class="gp-card-header">
-                        <h2 class="gp-card-title">Webhook Integration</h2>
-                        <p class="gp-card-description">
-                            Configure and test webhook endpoints for real-time payment notifications.
-                        </p>
+                        <h2 class="gp-card-title">Card Details</h2>
                     </div>
-                    
-                    <div class="gp-code-block">
-// Example webhook handler
-app.post('/webhook', (req, res) => {
-    const signature = req.headers['x-gp-signature'];
-    const payload = req.body;
-    
-    // Verify webhook signature
-    if (verifySignature(payload, signature)) {
-        handlePaymentEvent(payload);
-        res.status(200).send('OK');
-    } else {
-        res.status(400).send('Invalid signature');
-    }
-});
-                    </div>
-
-                    <div class="gp-alert gp-alert-warning">
-                        <strong>Security:</strong> Always verify webhook signatures to ensure requests are from Global Payments.
-                    </div>
-                </div>
-            </div>
-
-            <!-- Recurring Payments Tab -->
-            <div class="gp-tab-content" id="recurring">
-                <div class="gp-card">
-                    <div class="gp-card-header">
-                        <h2 class="gp-card-title">Recurring Payments</h2>
-                        <p class="gp-card-description">
-                            Set up subscription billing and recurring payment schedules.
-                        </p>
-                    </div>
-                    
-                    <form id="recurring-form" class="gp-form">
+                    <form id="payment-form" class="gp-form" onsubmit="runFlow(event)">
                         <div class="gp-form-row">
                             <div class="gp-form-group">
-                                <label for="subscription-amount" class="gp-label">Monthly Amount ($):</label>
-                                <input type="number" id="subscription-amount" name="subscription-amount" class="gp-input" min="1.00" step="0.01" value="29.99" required>
+                                <label for="card_number" class="gp-label">Card Number</label>
+                                <input type="text" id="card_number" name="card_number" class="gp-input"
+                                    placeholder="4263970000005262" maxlength="19" required
+                                    style="font-family: monospace;" autocomplete="cc-number">
                             </div>
-                            
+                            <div class="gp-form-group" style="max-width: 100px;">
+                                <label for="cvn" class="gp-label">CVV</label>
+                                <input type="text" id="cvn" name="cvn" class="gp-input"
+                                    placeholder="123" maxlength="4" autocomplete="cc-csc">
+                            </div>
+                        </div>
+                        <div class="gp-form-row">
                             <div class="gp-form-group">
-                                <label for="billing-cycle" class="gp-label">Billing Cycle:</label>
-                                <select id="billing-cycle" name="billing-cycle" class="gp-select" required>
-                                    <option value="monthly">Monthly</option>
-                                    <option value="quarterly">Quarterly</option>
-                                    <option value="annually">Annually</option>
+                                <label for="exp_month" class="gp-label">Expiry Month</label>
+                                <input type="text" id="exp_month" name="exp_month" class="gp-input"
+                                    placeholder="12" maxlength="2" required autocomplete="cc-exp-month">
+                            </div>
+                            <div class="gp-form-group">
+                                <label for="exp_year" class="gp-label">Expiry Year</label>
+                                <input type="text" id="exp_year" name="exp_year" class="gp-input"
+                                    placeholder="2026" maxlength="4" required autocomplete="cc-exp-year">
+                            </div>
+                        </div>
+                        <div class="gp-form-group">
+                            <label for="cardholder_name" class="gp-label">Cardholder Name</label>
+                            <input type="text" id="cardholder_name" name="cardholder_name" class="gp-input"
+                                value="John Doe" required autocomplete="cc-name">
+                        </div>
+                        <div class="gp-form-row">
+                            <div class="gp-form-group">
+                                <label for="amount" class="gp-label">Amount (£)</label>
+                                <input type="number" id="amount" name="amount" class="gp-input"
+                                    value="10.00" min="0.01" step="0.01" required>
+                            </div>
+                            <div class="gp-form-group">
+                                <label for="currency" class="gp-label">Currency</label>
+                                <select id="currency" name="currency" class="gp-select">
+                                    <option value="GBP">GBP</option>
+                                    <option value="EUR">EUR</option>
+                                    <option value="USD">USD</option>
                                 </select>
                             </div>
                         </div>
 
-                        <div class="gp-form-group">
-                            <label class="gp-label">Payment Method:</label>
-                            <div id="credit-card-recurring"></div>
-                        </div>
-
-                        <button type="submit" class="gp-button gp-button-primary gp-button-full">
-                            Set Up Subscription
+                        <button type="submit" id="submit-btn" class="gp-button gp-button-primary gp-button-full">
+                            Run 3DS2 Flow
                         </button>
+                        <button type="button" class="gp-button gp-button-full" style="margin-top: 8px;"
+                            onclick="resetFlow()">Reset</button>
                     </form>
+                </div>
+            </div>
+
+            <!-- RIGHT COLUMN: Flow Status -->
+            <div>
+                <div class="gp-card">
+                    <div class="gp-card-header">
+                        <h2 class="gp-card-title">3DS2 Flow</h2>
+                    </div>
+
+                    <!-- Step indicators -->
+                    <div class="flow-steps">
+                        <div class="flow-step" id="step-ind-1">1. Enroll</div>
+                        <div class="flow-step" id="step-ind-2">2. Method</div>
+                        <div class="flow-step" id="step-ind-3">3. Auth</div>
+                        <div class="flow-step" id="step-ind-4">4. Challenge</div>
+                        <div class="flow-step" id="step-ind-5">5. Result</div>
+                        <div class="flow-step" id="step-ind-6">6. Payment</div>
+                    </div>
+
+                    <!-- Step 1: Enrollment -->
+                    <div id="panel-1">
+                        <strong style="font-size: 14px;">Step 1 — Enrollment Check</strong>
+                        <div id="result-1"></div>
+                        <button class="raw-toggle" onclick="toggleRaw('raw-1')">Show raw</button>
+                        <div class="raw-response" id="raw-1"></div>
+                    </div>
+
+                    <hr style="margin: 16px 0; border: none; border-top: 1px solid #eee;">
+
+                    <!-- Step 2: Method URL -->
+                    <div id="panel-2">
+                        <strong style="font-size: 14px;">Step 2 — Device Fingerprint</strong>
+                        <div id="result-2"></div>
+                    </div>
+
+                    <hr style="margin: 16px 0; border: none; border-top: 1px solid #eee;">
+
+                    <!-- Step 3: Initiate Auth -->
+                    <div id="panel-3">
+                        <strong style="font-size: 14px;">Step 3 — Initiate Authentication</strong>
+                        <div id="result-3"></div>
+                        <button class="raw-toggle" onclick="toggleRaw('raw-3')">Show raw</button>
+                        <div class="raw-response" id="raw-3"></div>
+                    </div>
+
+                    <hr style="margin: 16px 0; border: none; border-top: 1px solid #eee;">
+
+                    <!-- Step 4: Challenge -->
+                    <div id="panel-4">
+                        <strong style="font-size: 14px;">Step 4 — ACS Challenge</strong>
+                        <div id="result-4"></div>
+                    </div>
+
+                    <hr style="margin: 16px 0; border: none; border-top: 1px solid #eee;">
+
+                    <!-- Step 5: Auth Result -->
+                    <div id="panel-5">
+                        <strong style="font-size: 14px;">Step 5 — Authentication Result</strong>
+                        <div id="result-5"></div>
+                        <button class="raw-toggle" onclick="toggleRaw('raw-5')">Show raw</button>
+                        <div class="raw-response" id="raw-5"></div>
+                    </div>
+
+                    <hr style="margin: 16px 0; border: none; border-top: 1px solid #eee;">
+
+                    <!-- Step 6: Payment -->
+                    <div id="panel-6">
+                        <strong style="font-size: 14px;">Step 6 — Payment Authorisation</strong>
+                        <div id="result-6"></div>
+                        <button class="raw-toggle" onclick="toggleRaw('raw-6')">Show raw</button>
+                        <div class="raw-response" id="raw-6"></div>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
 
+    <!-- ACS Challenge Modal -->
+    <div id="acs-modal" class="acs-modal">
+        <div class="acs-modal-inner">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <strong>ACS Challenge</strong>
+                <button class="raw-toggle" onclick="closeAcsModal()">✕ Close</button>
+            </div>
+            <iframe id="acs-iframe" name="acs-iframe" title="ACS Challenge" allowfullscreen></iframe>
+            <p style="font-size: 12px; color: #888; margin: 0;">
+                Complete the issuer challenge above. The modal will close automatically once done.
+            </p>
+        </div>
+    </div>
+
+    <!-- Hidden method URL iframe (device fingerprinting) -->
+    <iframe id="method-iframe" name="method-iframe" style="display:none;" title="3DS Method URL"></iframe>
+    <form id="method-form" target="method-iframe" method="POST" style="display:none;">
+        <input type="hidden" id="method-data-input" name="threeDSMethodData">
+    </form>
+
     <!-- Footer -->
-    <!-- 
-        DEVELOPER NOTE: Update the following footer information to match your business:
-        - Company name and copyright year
-        - Update all links to point to your actual Terms of Service, Privacy Policy, and Refund Policy pages
-        - Refund Policy link is typically required by payment processor underwriting in addition to Terms and Privacy
-        - Ensure all linked policies are accessible and up-to-date before going live
-    -->
     <footer class="gp-footer">
         <div class="gp-container">
             <div class="gp-footer-content">
                 <div class="gp-footer-section">
                     <p class="gp-footer-copyright">
-                        © 2024 Your Company Name. All rights reserved.
+                        © 2024 Global Payments. All rights reserved.
                     </p>
                 </div>
                 <div class="gp-footer-section">
                     <nav class="gp-footer-nav">
-                        <a href="/terms-of-service" class="gp-footer-link">Terms of Service</a>
-                        <a href="/privacy-policy" class="gp-footer-link">Privacy Policy</a>
-                        <a href="/refund-policy" class="gp-footer-link">Refund Policy</a>
+                        <a href="https://developer.globalpay.com/" class="gp-footer-link">Developer Portal</a>
+                        <a href="https://developer.globalpay.com/api" class="gp-footer-link">API Reference</a>
                     </nav>
                 </div>
             </div>
         </div>
     </footer>
 
-    <script src="js/script.js"></script>
+<script>
+// ─── State ────────────────────────────────────────────────────────────────────
+const state = {
+  serverTransId: null,
+  authData:      null,
+};
+
+// ─── Backend URL ─────────────────────────────────────────────────────────────
+function backendUrl() {
+  return document.getElementById('backend-selector').value;
+}
+
+// ─── Health check ─────────────────────────────────────────────────────────────
+async function checkHealth() {
+  const el = document.getElementById('health-status');
+  el.textContent = 'checking…';
+  el.style.color = '#888';
+  try {
+    const r = await fetch(`${backendUrl()}/api/health`);
+    const d = await r.json();
+    el.textContent = `✓ ${d.backend || 'backend'} online`;
+    el.style.color = '#2e7d32';
+  } catch {
+    el.textContent = '✗ backend unreachable';
+    el.style.color = '#b71c1c';
+  }
+}
+document.getElementById('backend-selector').addEventListener('change', checkHealth);
+checkHealth();
+
+// ─── Test card fill ───────────────────────────────────────────────────────────
+function fillCard(num, month, year, name) {
+  document.getElementById('card_number').value  = num;
+  document.getElementById('exp_month').value    = month;
+  document.getElementById('exp_year').value     = year;
+  document.getElementById('cvn').value          = '123';
+  document.getElementById('cardholder_name').value = name;
+}
+
+// ─── Flow step UI helpers ─────────────────────────────────────────────────────
+function setStep(n, state) { // state: 'active' | 'done' | 'error' | ''
+  const el = document.getElementById(`step-ind-${n}`);
+  el.className = `flow-step ${state}`;
+}
+
+function showResult(panel, html, type) { // type: 'ok' | 'warn' | 'err'
+  document.getElementById(`result-${panel}`).innerHTML =
+    `<div class="step-result ${type}">${html}</div>`;
+}
+
+function showRaw(panel, obj) {
+  const el = document.getElementById(`raw-${panel}`);
+  if (el) el.textContent = JSON.stringify(obj, null, 2);
+}
+
+function toggleRaw(id) {
+  const el = document.getElementById(id);
+  if (el) el.classList.toggle('visible');
+}
+
+function setLoading(loading) {
+  const btn = document.getElementById('submit-btn');
+  btn.disabled = loading;
+  btn.textContent = loading ? 'Processing…' : 'Run 3DS2 Flow';
+}
+
+function resetFlow() {
+  for (let i = 1; i <= 6; i++) {
+    setStep(i, '');
+    const r = document.getElementById(`result-${i}`);
+    if (r) r.innerHTML = '';
+    const rw = document.getElementById(`raw-${i}`);
+    if (rw) { rw.textContent = ''; rw.classList.remove('visible'); }
+  }
+  state.serverTransId = null;
+  state.authData      = null;
+  setLoading(false);
+}
+
+// ─── API calls ────────────────────────────────────────────────────────────────
+async function api(endpoint, body) {
+  const r = await fetch(`${backendUrl()}${endpoint}`, {
+    method:  'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body:    JSON.stringify(body),
+  });
+  return r.json();
+}
+
+// ─── Method URL (device fingerprinting) ──────────────────────────────────────
+function runMethodUrl(methodUrl, methodData) {
+  return new Promise(resolve => {
+    document.getElementById('method-data-input').value = methodData;
+    const form = document.getElementById('method-form');
+    form.action = methodUrl;
+    form.submit();
+    // Wait up to 10 seconds, then continue
+    setTimeout(resolve, 10000);
+  });
+}
+
+// ─── ACS Challenge iframe ─────────────────────────────────────────────────────
+function openAcsModal(challengeUrl) {
+  document.getElementById('acs-iframe').src = challengeUrl;
+  document.getElementById('acs-modal').classList.add('open');
+}
+
+function closeAcsModal() {
+  document.getElementById('acs-modal').classList.remove('open');
+  document.getElementById('acs-iframe').src = 'about:blank';
+}
+
+// ─── Main flow ────────────────────────────────────────────────────────────────
+async function runFlow(event) {
+  event.preventDefault();
+  resetFlow();
+  setLoading(true);
+
+  const card_number     = document.getElementById('card_number').value.replace(/\s/g, '');
+  const exp_month       = document.getElementById('exp_month').value.trim();
+  const exp_year        = document.getElementById('exp_year').value.trim();
+  const cvn             = document.getElementById('cvn').value.trim();
+  const cardholder_name = document.getElementById('cardholder_name').value.trim();
+  const amount          = document.getElementById('amount').value.trim();
+  const currency        = document.getElementById('currency').value;
+
+  // ── Step 1: Enrollment check ──────────────────────────────────────────────
+  setStep(1, 'active');
+  try {
+    const r1 = await api('/api/check-enrollment', { card_number, exp_month, exp_year });
+
+    if (!r1.success) {
+      showResult(1, `<strong>Error:</strong> ${r1.error || 'Check-enrollment failed'}`, 'err');
+      showRaw(1, r1);
+      setStep(1, 'error');
+      setLoading(false);
+      return;
+    }
+
+    state.serverTransId = r1.data.server_trans_id;
+    showResult(1, `
+      <dl>
+        <dt>Enrolled</dt><dd>${r1.data.enrolled}</dd>
+        <dt>Server Trans ID</dt><dd>${r1.data.server_trans_id}</dd>
+        <dt>Method URL</dt><dd>${r1.data.method_url || 'N/A'}</dd>
+      </dl>`, r1.data.enrolled === 'Y' ? 'ok' : 'warn');
+    showRaw(1, r1.raw);
+    setStep(1, 'done');
+
+    // ── Step 2: Method URL ─────────────────────────────────────────────────
+    setStep(2, 'active');
+    let methodCompletion = 'UNAVAILABLE';
+    if (r1.data.method_url && r1.data.method_data) {
+      showResult(2, 'Running device fingerprint (10s timeout)…', 'ok');
+      await runMethodUrl(r1.data.method_url, r1.data.method_data);
+      methodCompletion = 'YES';
+      showResult(2, 'Device fingerprint complete.', 'ok');
+    } else {
+      showResult(2, 'No Method URL — skipped.', 'warn');
+    }
+    setStep(2, 'done');
+
+    // ── Step 3: Initiate Auth ──────────────────────────────────────────────
+    setStep(3, 'active');
+    const browserData = {
+      accept_header:        'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      color_depth:          screen.colorDepth || 24,
+      ip:                   '123.123.123.123',
+      java_enabled:         false,
+      javascript_enabled:   true,
+      language:             navigator.language || 'en-GB',
+      screen_height:        screen.height,
+      screen_width:         screen.width,
+      challenge_window_size: 'FULL_SCREEN',
+      timezone:             String(new Date().getTimezoneOffset()),
+      user_agent:           navigator.userAgent,
+    };
+
+    const r3 = await api('/api/initiate-auth', {
+      server_trans_id: state.serverTransId,
+      method_url_completion: methodCompletion,
+      card_number, exp_month, exp_year, cardholder_name,
+      browser_data: browserData,
+      order: { amount, currency },
+    });
+
+    if (!r3.success) {
+      showResult(3, `<strong>Error:</strong> ${r3.error || 'Initiate-auth failed'}`, 'err');
+      showRaw(3, r3);
+      setStep(3, 'error');
+      setLoading(false);
+      return;
+    }
+
+    state.authData = r3.data;
+    const statusClass = { SUCCESS_AUTHENTICATED: 'ok', CHALLENGE_REQUIRED: 'warn',
+                          FAILED: 'err', NOT_AUTHENTICATED: 'err', UNAVAILABLE: 'warn' };
+    showResult(3, `
+      <dl>
+        <dt>Status</dt><dd>${r3.data.status}</dd>
+        <dt>Server Trans ID</dt><dd>${r3.data.server_trans_id}</dd>
+      </dl>`, statusClass[r3.data.status] || 'warn');
+    showRaw(3, r3.raw);
+    setStep(3, 'done');
+
+    // ── Step 4: Challenge (if required) ───────────────────────────────────
+    if (r3.data.status === 'CHALLENGE_REQUIRED') {
+      setStep(4, 'active');
+      if (!r3.data.acs_challenge_url) {
+        showResult(4, 'Challenge required but no ACS challenge URL returned.', 'err');
+        setStep(4, 'error');
+        setLoading(false);
+        return;
+      }
+      showResult(4, 'ACS challenge launched. Complete it in the popup, then the flow continues.', 'warn');
+      openAcsModal(r3.data.acs_challenge_url);
+
+      // Poll for challenge completion (wait for user to close modal)
+      await new Promise(resolve => {
+        const btn = document.querySelector('#acs-modal .raw-toggle');
+        const original = btn.onclick;
+        btn.onclick = () => { original(); resolve(); };
+      });
+      setStep(4, 'done');
+      showResult(4, 'Challenge window closed.', 'ok');
+    } else {
+      setStep(4, 'done');
+      showResult(4, r3.data.status === 'SUCCESS_AUTHENTICATED'
+        ? 'Frictionless — no challenge required.'
+        : `Status: ${r3.data.status} — no challenge.`, 'ok');
+    }
+
+    // ── Step 5: Get Auth Result ────────────────────────────────────────────
+    setStep(5, 'active');
+    const r5 = await api('/api/get-auth-result', { server_trans_id: state.serverTransId });
+
+    if (!r5.success) {
+      showResult(5, `<strong>Error:</strong> ${r5.error || 'Get-auth-result failed'}`, 'err');
+      showRaw(5, r5);
+      setStep(5, 'error');
+      setLoading(false);
+      return;
+    }
+
+    const authOk = ['SUCCESS_AUTHENTICATED', 'ATTEMPT_ACKNOWLEDGED'].includes(r5.data.status);
+    showResult(5, `
+      <dl>
+        <dt>Status</dt><dd>${r5.data.status}</dd>
+        <dt>ECI</dt><dd>${r5.data.eci || 'N/A'}</dd>
+        <dt>Auth Value</dt><dd>${r5.data.authentication_value || 'N/A'}</dd>
+        <dt>DS Trans Ref</dt><dd>${r5.data.ds_trans_ref || 'N/A'}</dd>
+      </dl>`, authOk ? 'ok' : 'warn');
+    showRaw(5, r5.raw);
+    setStep(5, 'done');
+
+    if (!authOk) {
+      showResult(6, `Authentication status "${r5.data.status}" — payment not attempted.`, 'warn');
+      setStep(6, 'error');
+      setLoading(false);
+      return;
+    }
+
+    // ── Step 6: Authorize Payment ──────────────────────────────────────────
+    setStep(6, 'active');
+    const r6 = await api('/api/authorize-payment', {
+      card_number, exp_month, exp_year, cvn, amount, currency,
+      three_ds: {
+        authentication_value: r5.data.authentication_value,
+        eci:                  r5.data.eci,
+        server_trans_ref:     r5.data.server_trans_ref || state.serverTransId,
+        ds_trans_ref:         r5.data.ds_trans_ref,
+        message_version:      r5.data.message_version || '2.2.0',
+      },
+    });
+
+    if (!r6.success) {
+      showResult(6, `<strong>Error:</strong> ${r6.error || 'Payment failed'}`, 'err');
+      showRaw(6, r6);
+      setStep(6, 'error');
+    } else {
+      showResult(6, `
+        <dl>
+          <dt>Transaction ID</dt><dd>${r6.data.transaction_id}</dd>
+          <dt>Status</dt><dd>${r6.data.status}</dd>
+          <dt>Result</dt><dd>${r6.data.result_code || 'N/A'}</dd>
+        </dl>`, r6.data.status === 'CAPTURED' || r6.data.result_code === '00' ? 'ok' : 'warn');
+      showRaw(6, r6.raw);
+      setStep(6, 'done');
+    }
+
+  } catch (err) {
+    console.error(err);
+    showResult(1, `Unexpected error: ${err.message}`, 'err');
+    setStep(1, 'error');
+  }
+
+  setLoading(false);
+}
+</script>
 </body>
 </html>

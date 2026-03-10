@@ -1,144 +1,90 @@
 services:
+  frontend:
+    image: nginx:alpine
+    ports:
+      - "8000:80"
+    volumes:
+      - ./:/usr/share/nginx/html:ro
+    networks:
+      - gp3ds
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/index.html"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
   nodejs:
-    build: 
+    build:
       context: ./nodejs
       dockerfile: Dockerfile
     ports:
-      - "8001:8000"
+      - "8001:3001"
+    env_file:
+      - ./nodejs/.env
     environment:
-      - PORT=8000
-      - PUBLIC_API_KEY=${PUBLIC_API_KEY}
-      - SECRET_API_KEY=${SECRET_API_KEY}
+      - PORT=3001
     networks:
-      - payments
+      - gp3ds
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8000/config"]
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3001/api/health"]
       interval: 10s
       timeout: 5s
-      retries: 3
-      start_period: 30s
-
-  python:
-    build: 
-      context: ./python
-      dockerfile: Dockerfile
-    ports:
-      - "8002:8000"
-    environment:
-      - PORT=8000
-      - PUBLIC_API_KEY=${PUBLIC_API_KEY}
-      - SECRET_API_KEY=${SECRET_API_KEY}
-    networks:
-      - payments
-    healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8000/config"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
-      start_period: 30s
+      retries: 5
+      start_period: 20s
 
   php:
-    build: 
+    build:
       context: ./php
       dockerfile: Dockerfile
     ports:
-      - "8003:8000"
-    environment:
-      - PUBLIC_API_KEY=${PUBLIC_API_KEY}
-      - SECRET_API_KEY=${SECRET_API_KEY}
+      - "8003:8080"
+    env_file:
+      - ./php/.env
     networks:
-      - payments
+      - gp3ds
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8000/config.php"]
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/api/health"]
       interval: 10s
       timeout: 5s
-      retries: 3
-      start_period: 30s
-
-  java:
-    build: 
-      context: ./java
-      dockerfile: Dockerfile
-    ports:
-      - "8004:8000"
-    environment:
-      - PUBLIC_API_KEY=${PUBLIC_API_KEY}
-      - SECRET_API_KEY=${SECRET_API_KEY}
-    networks:
-      - payments
-    healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8000/config"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
-      start_period: 60s
-
-  go:
-    build: 
-      context: ./go
-      dockerfile: Dockerfile
-    ports:
-      - "8005:8000"
-    environment:
-      - PORT=8000
-      - PUBLIC_API_KEY=${PUBLIC_API_KEY}
-      - SECRET_API_KEY=${SECRET_API_KEY}
-    networks:
-      - payments
-    healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8000/config"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
-      start_period: 30s
+      retries: 5
+      start_period: 20s
 
   dotnet:
-    build: 
+    build:
       context: ./dotnet
       dockerfile: Dockerfile
     ports:
-      - "8006:8000"
+      - "8006:8080"
+    env_file:
+      - ./dotnet/.env
     environment:
-      - ASPNETCORE_URLS=http://+:8000
-      - PUBLIC_API_KEY=${PUBLIC_API_KEY}
-      - SECRET_API_KEY=${SECRET_API_KEY}
+      - ASPNETCORE_URLS=http://+:8080
     networks:
-      - payments
+      - gp3ds
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8000/config"]
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/api/health"]
       interval: 10s
       timeout: 5s
-      retries: 3
+      retries: 5
       start_period: 30s
 
-  # Test runner container
-  tests:
-    build: 
-      context: .
-      dockerfile: Dockerfile.tests
-    depends_on:
-      nodejs:
-        condition: service_healthy
-      python:
-        condition: service_healthy
-      php:
-        condition: service_healthy
-      java:
-        condition: service_healthy
-      go:
-        condition: service_healthy
-      dotnet:
-        condition: service_healthy
-    environment:
-      - CI=true
+  java:
+    build:
+      context: ./java
+      dockerfile: Dockerfile
+    ports:
+      - "8004:8080"
+    env_file:
+      - ./java/.env
     networks:
-      - payments
-    volumes:
-      - ./test-results:/app/test-results
-      - ./playwright-report:/app/playwright-report
-    profiles:
-      - testing
+      - gp3ds
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
 
 networks:
-  payments:
+  gp3ds:
     driver: bridge

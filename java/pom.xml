@@ -5,22 +5,22 @@
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>com.globalpayments.example</groupId>
-    <artifactId>card-payments</artifactId>
+    <artifactId>gpapi-3ds2</artifactId>
     <version>1.0-SNAPSHOT</version>
     <packaging>war</packaging>
 
     <properties>
-        <maven.compiler.source>23</maven.compiler.source>
-        <maven.compiler.target>23</maven.compiler.target>
+        <maven.compiler.source>21</maven.compiler.source>
+        <maven.compiler.target>21</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     </properties>
 
     <dependencies>
-        <!-- Global Payments SDK -->
+        <!-- JSON processing -->
         <dependency>
-            <groupId>com.heartlandpaymentsystems</groupId>
-            <artifactId>globalpayments-sdk</artifactId>
-            <version>14.2.20</version>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+            <version>2.17.0</version>
         </dependency>
 
         <!-- Dotenv -->
@@ -47,7 +47,6 @@
                 <artifactId>maven-war-plugin</artifactId>
                 <version>3.3.2</version>
             </plugin>
-            <!-- Cargo plugin for modern Tomcat deployment -->
             <plugin>
                 <groupId>org.codehaus.cargo</groupId>
                 <artifactId>cargo-maven3-plugin</artifactId>
@@ -68,7 +67,7 @@
                     <configuration>
                         <properties>
                             <cargo.servlet.host>0.0.0.0</cargo.servlet.host>
-                            <cargo.servlet.port>8000</cargo.servlet.port>
+                            <cargo.servlet.port>8080</cargo.servlet.port>
                             <cargo.servlet.uriEncoding>UTF-8</cargo.servlet.uriEncoding>
                             <cargo.context>/</cargo.context>
                         </properties>
