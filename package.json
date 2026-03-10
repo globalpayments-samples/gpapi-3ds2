@@ -1,0 +1,19 @@
+{
+  "name": "starter-template",
+  "version": "1.0.0",
+  "description": "Global Payments SDK starter template for multiple languages",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node nodejs/server.js",
+    "dev": "node nodejs/server.js"
+  },
+  "keywords": [
+    "payments",
+    "sdk",
+    "template",
+    "starter"
+  ],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {}
+}

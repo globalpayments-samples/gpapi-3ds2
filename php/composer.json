@@ -1,0 +1,13 @@
+{
+    "name": "shane/php",
+    "require": {
+        "globalpayments/php-sdk": "^13.1",
+        "vlucas/phpdotenv": "^5.5"
+    },
+    "authors": [
+        {
+            "name": "Shane Logsdon",
+            "email": "shane@shanelogsdon.com"
+        }
+    ]
+}

@@ -1,0 +1,19 @@
+FROM mcr.microsoft.com/playwright:v1.53.1-jammy
+
+WORKDIR /app
+
+# Install Node.js dependencies
+COPY package*.json ./
+RUN npm ci
+
+# Copy test files
+COPY tests ./tests
+COPY playwright.config.js .
+
+# Create directories for test output
+RUN mkdir -p test-results playwright-report
+
+# Install additional tools for healthchecks
+RUN apt-get update && apt-get install -y wget && rm -rf /var/lib/apt/lists/*
+
+CMD ["npm", "run", "test:ci"]

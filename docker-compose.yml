@@ -1,0 +1,144 @@
+services:
+  nodejs:
+    build: 
+      context: ./nodejs
+      dockerfile: Dockerfile
+    ports:
+      - "8001:8000"
+    environment:
+      - PORT=8000
+      - PUBLIC_API_KEY=${PUBLIC_API_KEY}
+      - SECRET_API_KEY=${SECRET_API_KEY}
+    networks:
+      - payments
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8000/config"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  python:
+    build: 
+      context: ./python
+      dockerfile: Dockerfile
+    ports:
+      - "8002:8000"
+    environment:
+      - PORT=8000
+      - PUBLIC_API_KEY=${PUBLIC_API_KEY}
+      - SECRET_API_KEY=${SECRET_API_KEY}
+    networks:
+      - payments
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8000/config"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  php:
+    build: 
+      context: ./php
+      dockerfile: Dockerfile
+    ports:
+      - "8003:8000"
+    environment:
+      - PUBLIC_API_KEY=${PUBLIC_API_KEY}
+      - SECRET_API_KEY=${SECRET_API_KEY}
+    networks:
+      - payments
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8000/config.php"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  java:
+    build: 
+      context: ./java
+      dockerfile: Dockerfile
+    ports:
+      - "8004:8000"
+    environment:
+      - PUBLIC_API_KEY=${PUBLIC_API_KEY}
+      - SECRET_API_KEY=${SECRET_API_KEY}
+    networks:
+      - payments
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8000/config"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+
+  go:
+    build: 
+      context: ./go
+      dockerfile: Dockerfile
+    ports:
+      - "8005:8000"
+    environment:
+      - PORT=8000
+      - PUBLIC_API_KEY=${PUBLIC_API_KEY}
+      - SECRET_API_KEY=${SECRET_API_KEY}
+    networks:
+      - payments
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8000/config"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  dotnet:
+    build: 
+      context: ./dotnet
+      dockerfile: Dockerfile
+    ports:
+      - "8006:8000"
+    environment:
+      - ASPNETCORE_URLS=http://+:8000
+      - PUBLIC_API_KEY=${PUBLIC_API_KEY}
+      - SECRET_API_KEY=${SECRET_API_KEY}
+    networks:
+      - payments
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8000/config"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  # Test runner container
+  tests:
+    build: 
+      context: .
+      dockerfile: Dockerfile.tests
+    depends_on:
+      nodejs:
+        condition: service_healthy
+      python:
+        condition: service_healthy
+      php:
+        condition: service_healthy
+      java:
+        condition: service_healthy
+      go:
+        condition: service_healthy
+      dotnet:
+        condition: service_healthy
+    environment:
+      - CI=true
+    networks:
+      - payments
+    volumes:
+      - ./test-results:/app/test-results
+      - ./playwright-report:/app/playwright-report
+    profiles:
+      - testing
+
+networks:
+  payments:
+    driver: bridge
