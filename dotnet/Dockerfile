@@ -18,10 +18,6 @@ WORKDIR /app
 # Copy built application
 COPY --from=builder /app/out .
 
-# Create non-root user
-# RUN useradd --create-home --shell /bin/bash app
-USER app
-
 EXPOSE 8080
 
 ENV ASPNETCORE_URLS=http://+:8080
