@@ -1,33 +1,14 @@
-FROM maven:3.9-eclipse-temurin-21 AS builder
+FROM maven:3.9-eclipse-temurin-21
 
 WORKDIR /app
 
-# Copy pom.xml and download dependencies
+# Download dependencies first (cached layer — only reruns when pom.xml changes)
 COPY pom.xml .
 RUN mvn dependency:go-offline -B
 
-# Copy source code and build
+# Copy source code
 COPY src ./src
-RUN mvn clean package -DskipTests
-
-# Runtime stage
-FROM eclipse-temurin:21-jre-alpine
-
-WORKDIR /app
-
-# Install Maven (needed for Cargo plugin)
-RUN apk add --no-cache maven
-
-# Copy built application and pom.xml
-COPY --from=builder /app/target ./target
-COPY --from=builder /app/pom.xml .
-COPY --from=builder /root/.m2 /root/.m2
-
-# Create non-root user
-RUN addgroup -g 1001 -S javauser && \
-    adduser -S javauser -u 1001
-USER javauser
 
 EXPOSE 8080
 
-CMD ["mvn", "cargo:run", "-Dquiet"]
+CMD ["mvn", "cargo:run", "-DskipTests", "-Dquiet"]
