@@ -4,7 +4,7 @@ services:
     ports:
       - "8000:80"
     volumes:
-      - ./:/usr/share/nginx/html:ro
+      - ./index.html:/usr/share/nginx/html/index.html:ro
     networks:
       - gp3ds
     healthcheck:
