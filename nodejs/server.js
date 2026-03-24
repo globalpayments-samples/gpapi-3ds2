@@ -93,6 +93,8 @@ app.post('/api/check-enrollment', async (req, res) => {
 
     const payload = {
       account_name: process.env.GP_ACCOUNT_NAME || 'transaction_processing',
+      account_id:   process.env.GP_ACCOUNT_ID,
+      merchant_id:  process.env.GP_MERCHANT_ID,
       channel:      'CNP',
       country:      'GB',
       amount:       '1000',
@@ -163,6 +165,8 @@ app.post('/api/initiate-auth', async (req, res) => {
 
     const payload = {
       account_name: process.env.GP_ACCOUNT_NAME || 'transaction_processing',
+      account_id:   process.env.GP_ACCOUNT_ID,
+      merchant_id:  process.env.GP_MERCHANT_ID,
       channel:      'CNP',
       country:      'GB',
       amount:       toMinorUnits(order?.amount || '10.00'),
@@ -277,6 +281,8 @@ app.post('/api/authorize-payment', async (req, res) => {
 
     const payload = {
       account_name: process.env.GP_ACCOUNT_NAME || 'transaction_processing',
+      account_id:   process.env.GP_ACCOUNT_ID,
+      merchant_id:  process.env.GP_MERCHANT_ID,
       channel:      'CNP',
       type:         'SALE',
       amount:       toMinorUnits(amount || '10.00'),
