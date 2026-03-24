@@ -9,7 +9,9 @@ $dotenv->load();
 
 $input = json_decode(file_get_contents('php://input'), true) ?? [];
 
-$serverTransId       = $input['server_trans_id']        ?? '';
+$serverTransIdRaw    = $input['server_trans_id']        ?? '';
+$serverTransId       = preg_replace('/^AUT_/', '', $serverTransIdRaw);
+$messageVersion      = $input['message_version']         ?? '2.1.0';
 $methodUrlCompletion = $input['method_url_completion']   ?? 'UNAVAILABLE';
 $cardNumber          = $input['card_number']             ?? '';
 $expMonth            = $input['exp_month']               ?? '';
@@ -23,6 +25,8 @@ $currency            = $order['currency']                ?? 'GBP';
 try {
     $raw = GpApiClient::request('POST', '/authentications', [
         'account_name' => getenv('GP_ACCOUNT_NAME') ?: 'transaction_processing',
+        'account_id'   => getenv('GP_ACCOUNT_ID') ?: null,
+        'merchant_id'  => getenv('GP_MERCHANT_ID') ?: null,
         'channel'      => 'CNP',
         'country'      => 'GB',
         'amount'       => GpApiClient::toMinorUnits($amount),
@@ -40,7 +44,7 @@ try {
         'three_ds' => [
             'source'               => 'BROWSER',
             'preference'           => 'NO_PREFERENCE',
-            'message_version'      => '2.2.0',
+            'message_version'      => $messageVersion,
             'server_trans_ref'     => $serverTransId,
             'method_url_completion' => $methodUrlCompletion,
         ],
@@ -74,7 +78,8 @@ try {
             'user_agent'           => $browserData['user_agent']           ?? 'Mozilla/5.0',
         ],
         'notifications' => [
-            'challenge_return_url' => getenv('CHALLENGE_NOTIFICATION_URL'),
+            'challenge_return_url'       => getenv('CHALLENGE_NOTIFICATION_URL'),
+            'three_ds_method_return_url' => getenv('METHOD_NOTIFICATION_URL'),
         ],
     ]);
 

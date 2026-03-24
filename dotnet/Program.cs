@@ -116,9 +116,13 @@ app.MapPost("/api/check-enrollment", async (HttpRequest req) =>
     var challengeUrl = Environment.GetEnvironmentVariable("CHALLENGE_NOTIFICATION_URL");
     var methodUrl    = Environment.GetEnvironmentVariable("METHOD_NOTIFICATION_URL");
 
+    var accountId   = Environment.GetEnvironmentVariable("GP_ACCOUNT_ID");
+    var merchantId  = Environment.GetEnvironmentVariable("GP_MERCHANT_ID");
+
     var payload = new
     {
-        account_name = accountName, channel = "CNP", country = "GB",
+        account_name = accountName, account_id = accountId, merchant_id = merchantId,
+        channel = "CNP", country = "GB",
         amount = "1000", currency = "GBP", reference = Guid.NewGuid().ToString(),
         payment_method = new
         {
@@ -134,8 +138,7 @@ app.MapPost("/api/check-enrollment", async (HttpRequest req) =>
 
     string? mUrl = null, mData = null;
     if (r.TryGetProperty("three_ds", out var tds) &&
-        tds.TryGetProperty("acs_info", out var acs) &&
-        acs.TryGetProperty("method_url", out var mu) &&
+        tds.TryGetProperty("method_url", out var mu) &&
         mu.ValueKind != JsonValueKind.Null)
     {
         mUrl  = mu.GetString();
@@ -143,15 +146,20 @@ app.MapPost("/api/check-enrollment", async (HttpRequest req) =>
         mData = Convert.ToBase64String(Encoding.UTF8.GetBytes(mJson));
     }
 
+    var tds2 = r.TryGetProperty("three_ds", out var t2) ? t2 : default;
+    string? Tds2(string k) => tds2.ValueKind != JsonValueKind.Undefined && tds2.TryGetProperty(k, out var v) ? v.GetString() : null;
+
     return Results.Ok(new
     {
         success = true,
         data = new
         {
-            server_trans_id = r.GetProperty("id").GetString(),
-            enrolled        = r.TryGetProperty("three_ds", out var t2) && t2.TryGetProperty("enrolled", out var en) ? en.GetString() : null,
-            method_url      = mUrl,
-            method_data     = mData
+            server_trans_id  = r.GetProperty("id").GetString(),
+            server_trans_ref = Tds2("server_trans_ref"),
+            enrolled         = Tds2("enrolled_status"),
+            message_version  = Tds2("message_version"),
+            method_url       = mUrl,
+            method_data      = mData
         },
         raw = r
     });
@@ -162,7 +170,9 @@ app.MapPost("/api/initiate-auth", async (HttpRequest req) =>
     var root = (await JsonDocument.ParseAsync(req.Body)).RootElement;
 
     string Get(string k, string def = "") => root.TryGetProperty(k, out var v) ? v.GetString() ?? def : def;
-    var serverTransId       = Get("server_trans_id");
+    var serverTransIdRaw    = Get("server_trans_id");
+    var serverTransId       = serverTransIdRaw.StartsWith("AUT_") ? serverTransIdRaw[4..] : serverTransIdRaw;
+    var messageVersion      = Get("message_version", "2.1.0");
     var methodUrlCompletion = Get("method_url_completion", "UNAVAILABLE");
     var cardNumber          = Get("card_number");
     var expMonth            = Get("exp_month");
@@ -176,11 +186,15 @@ app.MapPost("/api/initiate-auth", async (HttpRequest req) =>
     string Bd(string k, string def) => bd.ValueKind != JsonValueKind.Undefined && bd.TryGetProperty(k, out var v) ? v.ToString() : def;
 
     var accountName  = Environment.GetEnvironmentVariable("GP_ACCOUNT_NAME") ?? "transaction_processing";
+    var accountId2   = Environment.GetEnvironmentVariable("GP_ACCOUNT_ID");
+    var merchantId2  = Environment.GetEnvironmentVariable("GP_MERCHANT_ID");
     var challengeUrl = Environment.GetEnvironmentVariable("CHALLENGE_NOTIFICATION_URL");
+    var methodUrl2   = Environment.GetEnvironmentVariable("METHOD_NOTIFICATION_URL");
 
     var payload = new
     {
-        account_name = accountName, channel = "CNP", country = "GB",
+        account_name = accountName, account_id = accountId2, merchant_id = merchantId2,
+        channel = "CNP", country = "GB",
         amount = ToMinorUnits(amount), currency, reference = Guid.NewGuid().ToString(),
         payment_method = new
         {
@@ -189,7 +203,7 @@ app.MapPost("/api/initiate-auth", async (HttpRequest req) =>
         },
         three_ds = new
         {
-            source = "BROWSER", preference = "NO_PREFERENCE", message_version = "2.2.0",
+            source = "BROWSER", preference = "NO_PREFERENCE", message_version = messageVersion,
             server_trans_ref = serverTransId, method_url_completion = methodUrlCompletion
         },
         order = new
@@ -216,7 +230,7 @@ app.MapPost("/api/initiate-auth", async (HttpRequest req) =>
             timezone              = Bd("timezone",             "0"),
             user_agent            = Bd("user_agent",           "Mozilla/5.0")
         },
-        notifications = new { challenge_return_url = challengeUrl }
+        notifications = new { challenge_return_url = challengeUrl, three_ds_method_return_url = methodUrl2 }
     };
 
     var (r, ok, status) = await GpRequest("POST", "/ucp/authentications", payload);

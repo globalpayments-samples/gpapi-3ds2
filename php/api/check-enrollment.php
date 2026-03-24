@@ -16,6 +16,8 @@ $expYear    = $input['exp_year']    ?? '';
 try {
     $raw = GpApiClient::request('POST', '/authentications', [
         'account_name' => getenv('GP_ACCOUNT_NAME') ?: 'transaction_processing',
+        'account_id'   => getenv('GP_ACCOUNT_ID') ?: null,
+        'merchant_id'  => getenv('GP_MERCHANT_ID') ?: null,
         'channel'      => 'CNP',
         'country'      => 'GB',
         'amount'       => '1000',
@@ -40,7 +42,7 @@ try {
         ],
     ]);
 
-    $methodUrl  = $raw['three_ds']['acs_info']['method_url'] ?? null;
+    $methodUrl  = $raw['three_ds']['method_url'] ?? null;
     $methodData = null;
     if ($methodUrl) {
         $methodJson = json_encode([
@@ -53,10 +55,12 @@ try {
     GpApiClient::jsonResponse([
         'success' => true,
         'data' => [
-            'server_trans_id' => $raw['id'],
-            'enrolled'        => $raw['three_ds']['enrolled'] ?? null,
-            'method_url'      => $methodUrl,
-            'method_data'     => $methodData,
+            'server_trans_id'  => $raw['id'],
+            'server_trans_ref' => $raw['three_ds']['server_trans_ref'] ?? null,
+            'enrolled'         => $raw['three_ds']['enrolled_status'] ?? null,
+            'message_version'  => $raw['three_ds']['message_version'] ?? null,
+            'method_url'       => $methodUrl,
+            'method_data'      => $methodData,
         ],
         'raw' => $raw,
     ]);

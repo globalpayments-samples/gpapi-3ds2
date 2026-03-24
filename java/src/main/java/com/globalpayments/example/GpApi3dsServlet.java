@@ -122,6 +122,10 @@ public class GpApi3dsServlet extends HttpServlet {
 
         ObjectNode payload = MAPPER.createObjectNode();
         payload.put("account_name", env("GP_ACCOUNT_NAME", "transaction_processing"));
+        String accountId = env("GP_ACCOUNT_ID", "");
+        if (!accountId.isEmpty()) payload.put("account_id", accountId);
+        String merchantId = env("GP_MERCHANT_ID", "");
+        if (!merchantId.isEmpty()) payload.put("merchant_id", merchantId);
         payload.put("channel",  "CNP");
         payload.put("country",  "GB");
         payload.put("amount",   "1000");
@@ -145,10 +149,10 @@ public class GpApi3dsServlet extends HttpServlet {
 
         String methodUrl  = null;
         String methodData = null;
-        JsonNode acs = raw.path("three_ds").path("acs_info");
-        if (!acs.isMissingNode() && !acs.path("method_url").isMissingNode()
-                && !acs.path("method_url").isNull()) {
-            methodUrl = acs.path("method_url").asText();
+        JsonNode tds3 = raw.path("three_ds");
+        if (!tds3.isMissingNode() && !tds3.path("method_url").isMissingNode()
+                && !tds3.path("method_url").isNull()) {
+            methodUrl = tds3.path("method_url").asText();
             String mJson = MAPPER.writeValueAsString(MAPPER.createObjectNode()
                 .put("threeDSServerTransID",  raw.path("id").asText())
                 .put("methodNotificationURL", env("METHOD_NOTIFICATION_URL", "")));
@@ -156,16 +160,20 @@ public class GpApi3dsServlet extends HttpServlet {
         }
 
         ObjectNode data = MAPPER.createObjectNode();
-        data.put("server_trans_id", raw.path("id").asText());
-        data.put("enrolled",        raw.path("three_ds").path("enrolled").asText(null));
-        data.put("method_url",      methodUrl);
-        data.put("method_data",     methodData);
+        data.put("server_trans_id",  raw.path("id").asText());
+        data.put("server_trans_ref", tds3.path("server_trans_ref").asText(null));
+        data.put("enrolled",         tds3.path("enrolled_status").asText(null));
+        data.put("message_version",  tds3.path("message_version").asText(null));
+        data.put("method_url",       methodUrl);
+        data.put("method_data",      methodData);
 
         writeSuccess(res, data, raw);
     }
 
     private void handleInitiateAuth(JsonNode in, HttpServletResponse res) throws Exception {
-        String serverTransId       = text(in, "server_trans_id");
+        String serverTransIdRaw    = textOr(in, "server_trans_id", "");
+        String serverTransId       = serverTransIdRaw.startsWith("AUT_") ? serverTransIdRaw.substring(4) : serverTransIdRaw;
+        String messageVersion      = textOr(in, "message_version", "2.1.0");
         String methodUrlCompletion = textOr(in, "method_url_completion", "UNAVAILABLE");
         String cardNumber          = text(in, "card_number");
         String expMonth            = text(in, "exp_month");
@@ -178,6 +186,10 @@ public class GpApi3dsServlet extends HttpServlet {
 
         ObjectNode payload = MAPPER.createObjectNode();
         payload.put("account_name", env("GP_ACCOUNT_NAME", "transaction_processing"));
+        String accountIdI = env("GP_ACCOUNT_ID", "");
+        if (!accountIdI.isEmpty()) payload.put("account_id", accountIdI);
+        String merchantIdI = env("GP_MERCHANT_ID", "");
+        if (!merchantIdI.isEmpty()) payload.put("merchant_id", merchantIdI);
         payload.put("channel",   "CNP");
         payload.put("country",   "GB");
         payload.put("amount",    toMinorUnits(amount));
@@ -193,7 +205,7 @@ public class GpApi3dsServlet extends HttpServlet {
         payload.putObject("three_ds")
                .put("source",                "BROWSER")
                .put("preference",            "NO_PREFERENCE")
-               .put("message_version",       "2.2.0")
+               .put("message_version",       messageVersion)
                .put("server_trans_ref",      serverTransId)
                .put("method_url_completion", methodUrlCompletion);
         payload.putObject("order")
@@ -222,7 +234,8 @@ public class GpApi3dsServlet extends HttpServlet {
                .put("timezone",              bdField(bd, "timezone",              "0"))
                .put("user_agent",            bdField(bd, "user_agent",            "Mozilla/5.0"));
         payload.putObject("notifications")
-               .put("challenge_return_url", env("CHALLENGE_NOTIFICATION_URL", ""));
+               .put("challenge_return_url",       env("CHALLENGE_NOTIFICATION_URL", ""))
+               .put("three_ds_method_return_url", env("METHOD_NOTIFICATION_URL",    ""));
 
         JsonNode raw = gpPost("/authentications", payload);
         JsonNode tds = raw.path("three_ds");
