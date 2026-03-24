@@ -48,8 +48,8 @@ class GpApiClient
             throw new \RuntimeException('GP_APP_ID and GP_APP_KEY must be set');
         }
 
-        $nonce  = (string) (int) (microtime(true) * 1000);
-        $secret = hash('sha512', $nonce . '.' . $appKey);
+        $nonce  = gmdate('Y-m-d\TH:i:s') . '.' . sprintf('%03d', (int)(microtime(true) * 1000) % 1000) . 'Z';
+        $secret = hash('sha512', $nonce . $appKey);
 
         $body = json_encode([
             'app_id'     => $appId,

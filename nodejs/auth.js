@@ -24,11 +24,8 @@ async function generateToken() {
     throw new Error('GP_APP_ID and GP_APP_KEY must be set in environment');
   }
 
-  const nonce  = Date.now().toString();
-  const secret = crypto.createHash('sha512').update(`${nonce}.${appKey}`).digest('hex');
-
-  const merchantId = process.env.GP_MERCHANT_ID;
-  if (!merchantId) throw new Error('GP_MERCHANT_ID must be set in environment');
+  const nonce  = new Date().toISOString();
+  const secret = crypto.createHash('sha512').update(`${nonce}${appKey}`).digest('hex');
 
   const response = await fetch(`${GP_API_BASE}/accesstoken`, {
     method: 'POST',
@@ -37,11 +34,10 @@ async function generateToken() {
       'X-GP-Version': GP_VERSION,
     },
     body: JSON.stringify({
-      app_id:      appId,
+      app_id:     appId,
       nonce,
       secret,
-      grant_type:  'client_credentials',
-      merchant_id: merchantId,
+      grant_type: 'client_credentials',
     }),
   });
 

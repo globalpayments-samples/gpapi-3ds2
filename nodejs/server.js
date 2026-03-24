@@ -121,23 +121,15 @@ app.post('/api/check-enrollment', async (req, res) => {
 
     const raw = await gpRequest('POST', '/authentications', payload);
 
-    // Build method_data for the device-fingerprint iframe
-    let method_data = null;
-    if (raw.three_ds?.acs_info?.method_url) {
-      const methodJson = JSON.stringify({
-        threeDSServerTransID: raw.id,
-        methodNotificationURL: process.env.METHOD_NOTIFICATION_URL,
-      });
-      method_data = Buffer.from(methodJson).toString('base64');
-    }
-
     res.json({
       success: true,
       data: {
-        server_trans_id: raw.id,
-        enrolled:        raw.three_ds?.enrolled,
-        method_url:      raw.three_ds?.acs_info?.method_url || null,
-        method_data,
+        server_trans_id:  raw.id,
+        server_trans_ref: raw.three_ds?.server_trans_ref,
+        enrolled:         raw.three_ds?.enrolled_status,
+        message_version:  raw.three_ds?.message_version,
+        method_url:       raw.three_ds?.method_url || null,
+        method_data:      raw.three_ds?.method_data?.encoded_method_data || null,
       },
       raw,
     });
@@ -154,6 +146,7 @@ app.post('/api/initiate-auth', async (req, res) => {
   try {
     const {
       server_trans_id,
+      message_version,
       method_url_completion,
       card_number,
       exp_month,
@@ -162,6 +155,9 @@ app.post('/api/initiate-auth', async (req, res) => {
       browser_data,
       order,
     } = req.body;
+
+    // server_trans_id may arrive as "AUT_uuid" or plain "uuid" — GP-API wants the plain UUID
+    const serverTransRef = String(server_trans_id || '').replace(/^AUT_/, '');
 
     const payload = {
       account_name: process.env.GP_ACCOUNT_NAME || 'transaction_processing',
@@ -182,10 +178,10 @@ app.post('/api/initiate-auth', async (req, res) => {
         },
       },
       three_ds: {
-        source:               'BROWSER',
-        preference:           'NO_PREFERENCE',
-        message_version:      '2.2.0',
-        server_trans_ref:     server_trans_id,
+        source:                'BROWSER',
+        preference:            'NO_PREFERENCE',
+        message_version:       message_version || '2.1.0',
+        server_trans_ref:      serverTransRef,
         method_url_completion: method_url_completion || 'UNAVAILABLE',
       },
       order: {
@@ -218,7 +214,8 @@ app.post('/api/initiate-auth', async (req, res) => {
         user_agent:           browser_data?.user_agent       || 'Mozilla/5.0',
       },
       notifications: {
-        challenge_return_url: process.env.CHALLENGE_NOTIFICATION_URL,
+        challenge_return_url:      process.env.CHALLENGE_NOTIFICATION_URL,
+        three_ds_method_return_url: process.env.METHOD_NOTIFICATION_URL,
       },
     };
 

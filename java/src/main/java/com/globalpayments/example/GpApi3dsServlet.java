@@ -366,8 +366,8 @@ public class GpApi3dsServlet extends HttpServlet {
         String appKey = env("GP_APP_KEY", "");
         if (appId.isEmpty() || appKey.isEmpty()) throw new Exception("GP_APP_ID and GP_APP_KEY must be set");
 
-        String nonce  = String.valueOf(System.currentTimeMillis());
-        String secret = sha512Hex(nonce + "." + appKey);
+        String nonce  = java.time.Instant.now().toString(); // ISO-8601 e.g. 2026-03-24T14:37:06.444Z
+        String secret = sha512Hex(nonce + appKey);
 
         ObjectNode body = MAPPER.createObjectNode();
         body.put("app_id",     appId);

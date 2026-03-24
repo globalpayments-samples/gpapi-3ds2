@@ -39,8 +39,8 @@ async Task<string> GetAccessTokenAsync(HttpClient http)
     var appId  = Environment.GetEnvironmentVariable("GP_APP_ID")  ?? throw new Exception("GP_APP_ID not set");
     var appKey = Environment.GetEnvironmentVariable("GP_APP_KEY") ?? throw new Exception("GP_APP_KEY not set");
 
-    var nonce  = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds().ToString();
-    var secret = Convert.ToHexString(SHA512.HashData(Encoding.UTF8.GetBytes($"{nonce}.{appKey}"))).ToLower();
+    var nonce  = DateTime.UtcNow.ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'");
+    var secret = Convert.ToHexString(SHA512.HashData(Encoding.UTF8.GetBytes($"{nonce}{appKey}"))).ToLower();
 
     var body = JsonSerializer.Serialize(new { app_id = appId, nonce, secret, grant_type = "client_credentials" });
     var req  = new HttpRequestMessage(HttpMethod.Post, "/ucp/accesstoken")
