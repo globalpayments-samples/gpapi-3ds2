@@ -256,8 +256,9 @@ public class GpApi3dsServlet extends HttpServlet {
     }
 
     private void handleGetAuthResult(JsonNode in, HttpServletResponse res) throws Exception {
-        String serverTransId = text(in, "server_trans_id");
-        if (serverTransId == null || serverTransId.isEmpty()) {
+        String serverTransIdRaw = text(in, "server_trans_id");
+        String serverTransId    = serverTransIdRaw != null ? serverTransIdRaw.replaceFirst("^AUT_", "") : "";
+        if (serverTransId.isEmpty()) {
             res.setStatus(400);
             res.getWriter().write("{\"success\":false,\"error\":\"server_trans_id is required\"}");
             return;

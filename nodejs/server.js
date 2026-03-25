@@ -249,7 +249,13 @@ app.post('/api/get-auth-result', async (req, res) => {
       return res.status(400).json({ success: false, error: 'server_trans_id is required' });
     }
 
-    const raw = await gpRequest('GET', `/authentications/${server_trans_id}`);
+    const transRef   = String(server_trans_id).replace(/^AUT_/, '');
+    const accountQs  = new URLSearchParams({
+      account_name: process.env.GP_ACCOUNT_NAME || 'transaction_processing',
+      account_id:   process.env.GP_ACCOUNT_ID   || '',
+      merchant_id:  process.env.GP_MERCHANT_ID  || '',
+    }).toString();
+    const raw = await gpRequest('GET', `/authentications/${transRef}?${accountQs}`);
 
     res.json({
       success: true,

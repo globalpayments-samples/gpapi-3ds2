@@ -8,7 +8,8 @@ $dotenv = Dotenv::createUnsafeMutable(__DIR__ . '/..');
 $dotenv->load();
 
 $input         = json_decode(file_get_contents('php://input'), true) ?? [];
-$serverTransId = $input['server_trans_id'] ?? '';
+$serverTransIdRaw = $input['server_trans_id'] ?? '';
+$serverTransId    = preg_replace('/^AUT_/', '', $serverTransIdRaw);
 
 if (!$serverTransId) {
     GpApiClient::jsonResponse(['success' => false, 'error' => 'server_trans_id is required'], 400);

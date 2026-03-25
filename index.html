@@ -398,8 +398,9 @@
 <script>
 // ─── State ────────────────────────────────────────────────────────────────────
 const state = {
-  serverTransId: null,
-  authData:      null,
+  serverTransId:  null,
+  messageVersion: null,
+  authData:       null,
 };
 
 // ─── Backend URL ─────────────────────────────────────────────────────────────
@@ -534,7 +535,8 @@ async function runFlow(event) {
       return;
     }
 
-    state.serverTransId = r1.data.server_trans_id;
+    state.serverTransId  = r1.data.server_trans_id;
+    state.messageVersion = r1.data.message_version;
     showResult(1, `
       <dl>
         <dt>Enrolled</dt><dd>${r1.data.enrolled}</dd>
@@ -574,7 +576,8 @@ async function runFlow(event) {
     };
 
     const r3 = await api('/api/initiate-auth', {
-      server_trans_id: state.serverTransId,
+      server_trans_id:       state.serverTransId,
+      message_version:       state.messageVersion,
       method_url_completion: methodCompletion,
       card_number, exp_month, exp_year, cardholder_name,
       browser_data: browserData,
@@ -629,7 +632,7 @@ async function runFlow(event) {
 
     // ── Step 5: Get Auth Result ────────────────────────────────────────────
     setStep(5, 'active');
-    const r5 = await api('/api/get-auth-result', { server_trans_id: state.serverTransId });
+    const r5 = await api('/api/get-auth-result', { server_trans_id: state.authData.server_trans_id });
 
     if (!r5.success) {
       showResult(5, `<strong>Error:</strong> ${r5.error || 'Get-auth-result failed'}`, 'err');

@@ -259,7 +259,8 @@ app.MapPost("/api/initiate-auth", async (HttpRequest req) =>
 app.MapPost("/api/get-auth-result", async (HttpRequest req) =>
 {
     var root          = (await JsonDocument.ParseAsync(req.Body)).RootElement;
-    var serverTransId = root.GetProperty("server_trans_id").GetString();
+    var serverTransIdRaw = root.GetProperty("server_trans_id").GetString();
+    var serverTransId    = serverTransIdRaw?.StartsWith("AUT_") == true ? serverTransIdRaw[4..] : serverTransIdRaw;
 
     if (string.IsNullOrEmpty(serverTransId))
         return Results.BadRequest(new { success = false, error = "server_trans_id is required" });
