@@ -64,7 +64,8 @@ async Task<string> GetAccessTokenAsync(HttpClient http)
 
 // ─── GP-API request helper ────────────────────────────────────────────────────
 
-using var httpClient = new HttpClient { BaseAddress = new Uri("https://apis.sandbox.globalpay.com") };
+using var httpClient = new HttpClient(new HttpClientHandler { AutomaticDecompression = System.Net.DecompressionMethods.All })
+    { BaseAddress = new Uri("https://apis.sandbox.globalpay.com") };
 
 async Task<(JsonElement root, bool ok, int status)> GpRequest(string method, string path, object? body = null)
 {

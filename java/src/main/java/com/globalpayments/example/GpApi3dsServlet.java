@@ -10,9 +10,11 @@ import jakarta.servlet.http.HttpServlet;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.util.zip.GZIPInputStream;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -344,14 +346,15 @@ public class GpApi3dsServlet extends HttpServlet {
             rb.method(method, HttpRequest.BodyPublishers.ofString(payload));
         }
 
-        HttpResponse<String> resp = HTTP.send(rb.build(), HttpResponse.BodyHandlers.ofString());
-        JsonNode result = MAPPER.readTree(resp.body().isEmpty() ? "{}" : resp.body());
+        HttpResponse<byte[]> resp = HTTP.send(rb.build(), HttpResponse.BodyHandlers.ofByteArray());
+        String bodyStr = decodeBody(resp);
+        JsonNode result = MAPPER.readTree(bodyStr.isEmpty() ? "{}" : bodyStr);
 
         if (resp.statusCode() < 200 || resp.statusCode() >= 300) {
             RuntimeException ex = new RuntimeException(
                 result.path("error").path("message").asText("GP-API error " + resp.statusCode()));
             ex.addSuppressed(new RuntimeException("STATUS:" + resp.statusCode()));
-            ex.addSuppressed(new RuntimeException("RAW:" + resp.body()));
+            ex.addSuppressed(new RuntimeException("RAW:" + bodyStr));
             throw ex;
         }
         return result;
@@ -395,16 +398,31 @@ public class GpApi3dsServlet extends HttpServlet {
             .POST(HttpRequest.BodyPublishers.ofString(MAPPER.writeValueAsString(body)))
             .build();
 
-        HttpResponse<String> resp = HTTP.send(req, HttpResponse.BodyHandlers.ofString());
+        HttpResponse<byte[]> resp = HTTP.send(req, HttpResponse.BodyHandlers.ofByteArray());
+        String tokenBody = decodeBody(resp);
         if (resp.statusCode() < 200 || resp.statusCode() >= 300) {
-            throw new Exception("Token generation failed (" + resp.statusCode() + "): " + resp.body());
+            throw new Exception("Token generation failed (" + resp.statusCode() + "): " + tokenBody);
         }
 
-        JsonNode result  = MAPPER.readTree(resp.body());
+        JsonNode result  = MAPPER.readTree(tokenBody);
         cachedToken      = result.get("token").asText();
         int expiresIn    = result.path("seconds_to_expire").asInt(3599);
         tokenExpiresAt   = System.currentTimeMillis() + (expiresIn - 60) * 1000L;
         return cachedToken;
+    }
+
+    // ── HTTP helpers ─────────────────────────────────────────────────────────
+
+    private static String decodeBody(HttpResponse<byte[]> resp) throws IOException {
+        byte[] bytes = resp.body();
+        if (bytes == null || bytes.length == 0) return "";
+        String enc = resp.headers().firstValue("content-encoding").orElse("").toLowerCase();
+        if (enc.contains("gzip") || (bytes.length > 1 && (bytes[0] & 0xFF) == 0x1F && (bytes[1] & 0xFF) == 0x8B)) {
+            try (GZIPInputStream gzip = new GZIPInputStream(new ByteArrayInputStream(bytes))) {
+                return new String(gzip.readAllBytes(), StandardCharsets.UTF_8);
+            }
+        }
+        return new String(bytes, StandardCharsets.UTF_8);
     }
 
     // ── Response writers ─────────────────────────────────────────────────────

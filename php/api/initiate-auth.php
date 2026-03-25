@@ -4,7 +4,7 @@ require_once __DIR__ . '/../vendor/autoload.php';
 require_once __DIR__ . '/../src/GpApiClient.php';
 
 use Dotenv\Dotenv;
-$dotenv = Dotenv::createImmutable(__DIR__ . '/..');
+$dotenv = Dotenv::createUnsafeMutable(__DIR__ . '/..');
 $dotenv->load();
 
 $input = json_decode(file_get_contents('php://input'), true) ?? [];
