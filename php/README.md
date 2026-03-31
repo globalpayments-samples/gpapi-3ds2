@@ -1,99 +1,68 @@
-# PHP Card Payment Example
+# PHP Backend
 
-This example demonstrates card payment processing using PHP and the Global Payments SDK.
+PHP 8.3+ server using the built-in CLI server (`php -S`). Dependencies managed by Composer — `vlucas/phpdotenv` only, no GP SDK.
 
-## Requirements
+Runs on port **8080** internally (Docker host port **8003**).
 
-- PHP 7.4 or later
-- Composer
-- Global Payments account and API credentials
+---
 
-## Project Structure
+## Files
 
-- `process-payment.php` - Payment processing script
-- `index.php` - Client-side payment form
-- `composer.json` - Project dependencies
-- `.env.sample` - Template for environment variables
-- `run.sh` - Convenience script to run the application
+```
+router.php           Request dispatcher
+src/GpApiClient.php  HTTP client + token cache (file-based, /tmp/gpapi_token.json)
+api/
+  health.php
+  check-enrollment.php
+  initiate-auth.php
+  get-auth-result.php
+  authorize-payment.php
+composer.json
+Dockerfile
+.env.example
+```
+
+---
 
 ## Setup
 
-1. Clone this repository
-2. Copy `.env.sample` to `.env`
-3. Update `.env` with your Global Payments credentials:
-   ```
-   PUBLIC_API_KEY=pk_test_xxx
-   SECRET_API_KEY=sk_test_xxx
-   ```
-4. Install dependencies:
-   ```bash
-   composer install
-   ```
-5. Run the application:
-   ```bash
-   ./run.sh
-   ```
-   Or manually:
-   ```bash
-   php -S localhost:8000
-   ```
+```bash
+cp .env.example .env
+# fill in GP_APP_ID, GP_APP_KEY, GP_MERCHANT_ID, GP_ACCOUNT_NAME, GP_ACCOUNT_ID
 
-## Implementation Details
-
-### Application Structure
-The application uses a simple PHP structure:
-- Static HTML form for payment collection
-- Separate PHP script for payment processing
-- Composer for dependency management
-
-### SDK Configuration
-Global Payments SDK configuration using environment variables:
-- Loads credentials from .env file
-- Sets up service URL for API communication
-- Configures developer identification
-
-### Payment Processing
-Payment processing flow:
-1. Client submits payment token and billing zip
-2. Server creates CreditCardData with token
-3. Creates Address with postal code
-4. Processes $10 USD charge
-5. Returns success/error response
-
-### Error Handling
-Implements comprehensive error handling:
-- Catches and processes API exceptions
-- Returns appropriate error messages
-- Handles edge cases gracefully
-
-## API Endpoints
-
-### POST /process-payment.php
-Processes a payment using the provided token and billing information.
-
-Request Parameters:
-- `payment_token` (string, required) - Token from client-side SDK
-- `billing_zip` (string, required) - Billing postal code
-
-Response (Success):
-```
-Payment successful! Transaction ID: xxx
+composer install
+php -S localhost:8080 router.php
 ```
 
-Response (Error):
+---
+
+## Environment Variables
+
 ```
-Error: [error message]
+GP_APP_ID=
+GP_APP_KEY=
+GP_MERCHANT_ID=
+GP_ACCOUNT_NAME=transaction_processing
+GP_ACCOUNT_ID=
 ```
 
-## Security Considerations
+---
 
-This example demonstrates basic implementation. For production use, consider:
-- Implementing additional input validation
-- Adding request rate limiting
-- Including security headers
-- Implementing proper logging
-- Adding payment fraud prevention measures
-- Using HTTPS in production
-- Implementing CSRF protection
-- Configuring proper session handling
-- Setting appropriate PHP security directives
+## Endpoints
+
+```
+GET  /api/health
+POST /api/check-enrollment
+POST /api/initiate-auth
+POST /api/get-auth-result
+POST /api/authorize-payment
+```
+
+---
+
+## Notes
+
+- Token is cached to `/tmp/gpapi_token.json` and reloaded on subsequent requests.
+- cURL is configured with `CURLOPT_ENCODING=''` to handle gzip responses from GP-API automatically.
+- Dotenv loaded via `createUnsafeMutable` to allow overriding existing env vars.
+- The `composer.lock` file is excluded from the Dockerfile COPY to avoid stale dependency issues.

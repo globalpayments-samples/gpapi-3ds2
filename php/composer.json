@@ -1,13 +1,13 @@
 {
-    "name": "shane/php",
+    "name": "globalpayments/gpapi-3ds2-php",
+    "description": "GP-API 3DS2 sandbox tester — PHP backend",
     "require": {
-        "globalpayments/php-sdk": "^13.1",
+        "php": ">=8.1",
         "vlucas/phpdotenv": "^5.5"
     },
-    "authors": [
-        {
-            "name": "Shane Logsdon",
-            "email": "shane@shanelogsdon.com"
+    "autoload": {
+        "psr-4": {
+            "GpApi\\": "src/"
         }
-    ]
+    }
 }
