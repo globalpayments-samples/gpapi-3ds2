@@ -1,112 +1,64 @@
-# Node.js Card Payment Example
+# Node.js Backend
 
-This example demonstrates card payment processing using Express.js and the Global Payments SDK.
+Express server written as ES modules, using Node 18's built-in `fetch`. No GP SDK — all GP-API calls go out as plain HTTP requests.
 
-## Requirements
+Runs on port **3001** (Docker host port **8001**).
 
-- Node.js 14.x or later
-- npm (Node Package Manager)
-- Global Payments account and API credentials
+---
 
-## Project Structure
+## Files
 
-- `server.js` - Main application file containing server setup and payment processing
-- `index.html` - Client-side payment form
-- `package.json` - Project dependencies and scripts
-- `.env.sample` - Template for environment variables
-- `run.sh` - Convenience script to run the application
+```
+auth.js      Token generation and caching (OAuth2 Bearer)
+server.js    Express routes for all 5 API endpoints
+package.json express + dotenv only
+Dockerfile
+.env.example
+```
+
+---
 
 ## Setup
 
-1. Clone this repository
-2. Copy `.env.sample` to `.env`
-3. Update `.env` with your Global Payments credentials:
-   ```
-   PUBLIC_API_KEY=pk_test_xxx
-   SECRET_API_KEY=sk_test_xxx
-   ```
-4. Install dependencies:
-   ```bash
-   npm install
-   ```
-5. Run the application:
-   ```bash
-   ./run.sh
-   ```
-   Or manually:
-   ```bash
-   node server.js
-   ```
+```bash
+cp .env.example .env
+# fill in GP_APP_ID, GP_APP_KEY, GP_MERCHANT_ID, GP_ACCOUNT_NAME, GP_ACCOUNT_ID
 
-## Implementation Details
-
-### Server Setup
-The application uses Express.js to create a web server that:
-- Serves static files
-- Processes payment requests
-- Provides configuration endpoint for client-side SDK
-- Handles JSON and form-encoded requests
-
-### SDK Configuration
-Global Payments SDK configuration using environment variables:
-- Loads credentials from .env file
-- Sets up service URL for API communication
-- Configures developer identification
-
-### Payment Processing
-Payment processing flow:
-1. Client submits payment token and billing zip
-2. Server creates CreditCardData with token
-3. Creates Address with postal code
-4. Processes $10 USD charge
-5. Returns success/error response
-
-### Error Handling
-Implements comprehensive error handling:
-- Catches and processes API exceptions
-- Differentiates between API and general errors
-- Returns appropriate error messages
-
-## API Endpoints
-
-### GET /config
-Returns public API key for client-side SDK initialization.
-
-Response:
-```json
-{
-    "publicApiKey": "pk_test_xxx"
-}
+npm install
+node server.js
 ```
 
-### POST /process-payment
-Processes a payment using the provided token and billing information.
+Server starts at `http://localhost:3001`.
 
-Request Parameters:
-- `payment_token` (string, required) - Token from client-side SDK
-- `billing_zip` (string, required) - Billing postal code
+---
 
-Response (Success):
-```
-Payment successful! Transaction ID: xxx
-```
+## Environment Variables
 
-Response (Error):
 ```
-API Error: [error message]
-```
-or
-```
-Error: [error message]
+GP_APP_ID=
+GP_APP_KEY=
+GP_MERCHANT_ID=
+GP_ACCOUNT_NAME=transaction_processing
+GP_ACCOUNT_ID=
+PORT=3001
 ```
 
-## Security Considerations
+---
 
-This example demonstrates basic implementation. For production use, consider:
-- Implementing additional input validation
-- Adding request rate limiting
-- Including security headers
-- Implementing proper logging
-- Adding payment fraud prevention measures
-- Using HTTPS in production
-- Configuring Cross-Origin Resource Sharing (CORS) appropriately
+## Endpoints
+
+```
+GET  /api/health
+POST /api/check-enrollment
+POST /api/initiate-auth
+POST /api/get-auth-result
+POST /api/authorize-payment
+```
+
+---
+
+## Notes
+
+- Token logic is in `auth.js`: ISO-8601 nonce, `SHA512(nonce + appKey)` with no separator, no `merchant_id` in the token request body.
+- Tokens are cached in memory and refreshed when under 60 seconds to expiry.
+- `npm ci` will fail if there's no lockfile — use `npm install` instead.

@@ -1,100 +1,119 @@
-# Global Payments SDK Starter Template
+# GP-API 3DS2 Sandbox
 
-This starter template provides a customizable foundation for Global Payments SDK integration across multiple programming languages. Each implementation includes basic SDK setup, configuration management, and placeholder endpoints that you can modify for your specific payment use cases.
+A 3DS2 testing platform for the Global Payments Unified Commerce Platform (UCP). Four backend implementations (Node.js, PHP, .NET, Java) expose the same API, so you can swap runtimes without touching the frontend.
 
-## Available Implementations
+No GP SDK is used — all backends talk directly to `https://apis.sandbox.globalpay.com/ucp` over plain HTTP.
 
-- [.NET Core](./dotnet/) - ASP.NET Core web application
-- [Go](./go/) - Go HTTP server application
-- [Java](./java/) - Jakarta EE servlet-based web application
-- [Node.js](./nodejs/) - Express.js web application
-- [PHP](./php/) - PHP web application
-- [Python](./python/) - Flask web application
+---
 
-## Template Features
+## Running with Docker
 
-- **SDK Configuration** - Basic setup with environment variables
-- **Placeholder Endpoints** - Ready-to-customize API endpoints  
-- **Error Handling** - Basic error handling structure
-- **Client Integration** - HTML form with hosted fields tokenization
-- **Multiple Languages** - Consistent structure across all implementations
+```bash
+cp nodejs/.env.example nodejs/.env   # then fill in credentials
+cp php/.env.example php/.env
+cp dotnet/.env.example dotnet/.env
+cp java/.env.example java/.env
 
-## Customization Options
-
-Each template includes:
-
-1. **Basic SDK Setup**
-   - Environment variable configuration
-   - Service URL configuration
-   - API key management
-
-2. **Starter Endpoints**
-   - GET `/config` - Configuration endpoint
-   - POST `/process-payment` - Payment processing template
-   - Commented examples for additional endpoints (authorize, capture, refund, etc.)
-
-3. **Ready-to-Modify Structure**
-   - TODO comments for customization points
-   - Example payment logic you can adapt
-   - Placeholder functions for various payment flows
-
-## Quick Start
-
-1. **Copy the template** - Copy this directory to start your new project
-2. **Choose your language** - Navigate to any implementation directory (nodejs, python, php, java, dotnet, go)
-3. **Set up credentials** - Copy `.env.sample` to `.env` and add your Global Payments API keys
-4. **Run the server** - Execute `./run.sh` to install dependencies and start the server
-5. **Customize** - Modify the code for your specific payment use case
-
-## Use Cases You Can Build
-
-This template can be adapted for various payment scenarios:
-
-- **Basic Charges** - Simple one-time payments
-- **Authorization/Capture** - Two-step payment processing
-- **Subscriptions** - Recurring payment processing
-- **Refunds** - Payment reversal functionality
-- **Multi-step Checkouts** - Complex payment flows
-- **Payment Methods** - Credit cards, ACH, alternative payments
-
-## Prerequisites
-
-- Global Payments account with API credentials
-- Development environment for your chosen language
-- Package manager (npm, pip, composer, maven, dotnet, go mod)
-
-## Customization Guide
-
-### Adding New Endpoints
-
-Each implementation includes commented examples for common payment operations:
-
-```javascript
-// Authorization only
-app.post('/authorize', ...)
-
-// Capture authorized payment  
-app.post('/capture', ...)
-
-// Process refund
-app.post('/refund', ...)
-
-// Get transaction details
-app.get('/transaction/:id', ...)
+docker compose up --build
 ```
 
-### Modifying Payment Logic
+| Service   | URL                    |
+|-----------|------------------------|
+| Frontend  | http://localhost:8000  |
+| Node.js   | http://localhost:8001  |
+| PHP       | http://localhost:8003  |
+| Java      | http://localhost:8004  |
+| .NET      | http://localhost:8006  |
 
-1. Update the `/process-payment` endpoint for your specific flow
-2. Add validation for your required fields
-3. Customize error handling and responses
-4. Add logging and monitoring as needed
+Open the frontend, pick a backend from the dropdown, and run through the 3DS2 flow.
 
-### Production Considerations
+---
 
-Enhance the template for production use with:
-- Input validation and sanitization
-- Comprehensive error handling and logging
-- Security headers and rate limiting
-- PCI compliance measures
-- Monitoring and alerting
+## Running Natively
+
+Each backend can run without Docker. See the README in each subfolder for the specific commands.
+
+```
+nodejs/   Node 18+, Express
+php/      PHP 8.3+, built-in CLI server
+dotnet/   .NET 9, minimal API
+java/     Java 21, Maven + Tomcat (Cargo)
+```
+
+---
+
+## Environment Variables
+
+Each backend needs its own `.env`. Copy from `.env.example` and fill in:
+
+```
+GP_APP_ID=
+GP_APP_KEY=
+GP_MERCHANT_ID=
+GP_ACCOUNT_NAME=transaction_processing
+GP_ACCOUNT_ID=
+```
+
+`GP_ACCOUNT_NAME` is case-sensitive — use the exact value shown in your developer portal.
+
+---
+
+## API Endpoints
+
+All four backends expose the same five routes:
+
+| Method | Path                    | Description                        |
+|--------|-------------------------|------------------------------------|
+| GET    | `/api/health`           | Returns backend name and status    |
+| POST   | `/api/check-enrollment` | Step 1 — card enrollment check     |
+| POST   | `/api/initiate-auth`    | Step 2 — 3DS method + auth request |
+| POST   | `/api/get-auth-result`  | Step 3 — poll authentication result|
+| POST   | `/api/authorize-payment`| Step 4 — authorize the payment     |
+
+---
+
+## Test Cards
+
+All cards use expiry `12/2026` and CVV `123`.
+
+| Card number      | Expected outcome     | ECI |
+|------------------|----------------------|-----|
+| 4263970000005262 | Frictionless success | 05  |
+| 5425230000004415 | Frictionless success | 02  |
+| 4012001037141112 | Challenge required   | —   |
+| 5114610000004778 | Challenge required   | —   |
+| 4012001036853337 | Auth failed          | 07  |
+| 4012001036273338 | Unavailable          | 07  |
+
+---
+
+## Token Authentication
+
+All backends generate Bearer tokens the same way:
+
+```
+nonce  = ISO-8601 datetime string
+secret = hex(SHA512(nonce + APP_KEY))   ← no separator, no merchant_id
+POST /ucp/accesstoken { app_id, nonce, secret, grant_type: "client_credentials" }
+```
+
+Tokens are cached and refreshed when under 60 seconds to expiry.
+
+---
+
+## Running the CLI Smoke Test
+
+```bash
+./test-all-cards.sh 3001 nodejs   # or 8003/php, 8006/dotnet, 8004/java
+```
+
+Runs all 6 test cards through all 4 steps and reports pass/fail per card.
+
+---
+
+## Known Sandbox Limitations
+
+- `GET /authentications/{id}` returns error 40212 — the sandbox credentials don't have read permission on that resource. This needs to be enabled by the GP-API team.
+- `initiate-auth` returns `AVAILABLE` instead of `SUCCESS_AUTHENTICATED` for frictionless cards — the sandbox 3DS Server doesn't recognise `developer.globalpayments.com` as a trusted method notification URL. A public `three_ds_method_return_url` on GP-API infrastructure is needed to get true frictionless success.
+
+These are sandbox account limitations, not bugs in the code.
