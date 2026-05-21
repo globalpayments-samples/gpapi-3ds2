@@ -1,6 +1,6 @@
 # Java Backend
 
-Jakarta EE servlet deployed to Tomcat via the Maven Cargo plugin. Uses Java's built-in `HttpClient`. No GP SDK — direct HTTP to GP-API UCP endpoints.
+Jakarta EE servlet deployed to Tomcat via the Maven Cargo plugin. Uses Java's built-in `HttpClient` for direct GP-API calls, while the browser uses Hosted Fields for single-use tokenization.
 
 Runs on port **8080** (Docker host port **8004**). Requires **Java 21**.
 
@@ -39,6 +39,8 @@ GP_APP_KEY=
 GP_MERCHANT_ID=
 GP_ACCOUNT_NAME=transaction_processing
 GP_ACCOUNT_ID=
+GP_API_ENVIRONMENT=sandbox
+GP_TOKENIZATION_ACCOUNT_NAME=
 ```
 
 ---
@@ -47,6 +49,7 @@ GP_ACCOUNT_ID=
 
 ```
 GET  /api/health
+GET  /api/tokenization-config
 POST /api/check-enrollment
 POST /api/initiate-auth
 POST /api/get-auth-result

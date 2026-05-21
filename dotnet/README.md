@@ -1,6 +1,6 @@
 # .NET Backend
 
-ASP.NET Core minimal API targeting .NET 9. Uses `HttpClient` with automatic gzip decompression. Token is held in memory. No GP SDK — direct HTTP to GP-API UCP endpoints.
+ASP.NET Core minimal API targeting .NET 9. Uses `HttpClient` with automatic gzip decompression. Token is held in memory. GP-API calls are direct HTTP, while the browser uses Hosted Fields for single-use tokenization.
 
 Runs on port **8080** (Docker host port **8006**).
 
@@ -40,6 +40,8 @@ GP_APP_KEY=
 GP_MERCHANT_ID=
 GP_ACCOUNT_NAME=transaction_processing
 GP_ACCOUNT_ID=
+GP_API_ENVIRONMENT=sandbox
+GP_TOKENIZATION_ACCOUNT_NAME=
 PORT=8080
 ```
 
@@ -49,6 +51,7 @@ PORT=8080
 
 ```
 GET  /api/health
+GET  /api/tokenization-config
 POST /api/check-enrollment
 POST /api/initiate-auth
 POST /api/get-auth-result

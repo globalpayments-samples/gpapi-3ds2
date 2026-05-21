@@ -18,6 +18,7 @@ if ($method === 'OPTIONS') {
 
 $routes = [
     'GET /api/health'             => __DIR__ . '/api/health.php',
+    'GET /api/tokenization-config'=> __DIR__ . '/api/tokenization-config.php',
     'POST /api/check-enrollment'  => __DIR__ . '/api/check-enrollment.php',
     'POST /api/initiate-auth'     => __DIR__ . '/api/initiate-auth.php',
     'POST /api/get-auth-result'   => __DIR__ . '/api/get-auth-result.php',

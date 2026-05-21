@@ -12,6 +12,7 @@ $input = json_decode(file_get_contents('php://input'), true) ?? [];
 $cardNumber = $input['card_number'] ?? '';
 $expMonth   = $input['exp_month']   ?? '';
 $expYear    = $input['exp_year']    ?? '';
+$paymentMethodId = $input['payment_method_id'] ?? null;
 
 try {
     $raw = GpApiClient::request('POST', '/authentications', [
@@ -23,7 +24,9 @@ try {
         'amount'       => '1000',
         'currency'     => 'GBP',
         'reference'    => GpApiClient::uuid(),
-        'payment_method' => [
+        'payment_method' => $paymentMethodId ? [
+            'id' => $paymentMethodId,
+        ] : [
             'entry_mode' => 'ECOM',
             'card' => [
                 'number'       => $cardNumber,

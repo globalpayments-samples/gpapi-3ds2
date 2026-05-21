@@ -13,6 +13,7 @@ $serverTransIdRaw    = $input['server_trans_id']        ?? '';
 $serverTransId       = preg_replace('/^AUT_/', '', $serverTransIdRaw);
 $messageVersion      = $input['message_version']         ?? '2.1.0';
 $methodUrlCompletion = $input['method_url_completion']   ?? 'UNAVAILABLE';
+$paymentMethodId     = $input['payment_method_id']       ?? null;
 $cardNumber          = $input['card_number']             ?? '';
 $expMonth            = $input['exp_month']               ?? '';
 $expYear             = $input['exp_year']                ?? '';
@@ -32,7 +33,11 @@ try {
         'amount'       => GpApiClient::toMinorUnits($amount),
         'currency'     => $currency,
         'reference'    => GpApiClient::uuid(),
-        'payment_method' => [
+        'payment_method' => $paymentMethodId ? [
+            'id' => $paymentMethodId,
+            'name' => $cardholderName,
+            'entry_mode' => 'ECOM',
+        ] : [
             'entry_mode' => 'ECOM',
             'card' => [
                 'number'       => $cardNumber,
@@ -92,6 +97,11 @@ try {
             'acs_trans_id'         => $raw['three_ds']['acs_trans_id']         ?? null,
             'acs_signed_content'   => $raw['three_ds']['acs_signed_content']   ?? null,
             'acs_challenge_url'    => $raw['three_ds']['acs_challenge_url']    ?? $raw['three_ds']['challenge_value'] ?? null,
+            'eci'                  => $raw['three_ds']['eci']                  ?? null,
+            'authentication_value' => $raw['three_ds']['authentication_value'] ?? null,
+            'ds_trans_ref'         => $raw['three_ds']['ds_trans_ref']         ?? null,
+            'message_version'      => $raw['three_ds']['message_version']      ?? null,
+            'server_trans_ref'     => $raw['three_ds']['server_trans_ref']     ?? $raw['id'],
         ],
         'raw' => $raw,
     ]);

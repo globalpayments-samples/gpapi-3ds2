@@ -9,12 +9,14 @@ using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using dotenv.net;
 
 DotEnv.Load();
 
 var builder = WebApplication.CreateBuilder(args);
 var app     = builder.Build();
+var jsonOptions = new JsonSerializerOptions { DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull };
 
 // CORS — allow frontend on any origin in dev
 app.Use(async (ctx, next) =>
@@ -31,18 +33,25 @@ app.Use(async (ctx, next) =>
 string? cachedToken     = null;
 long    tokenExpiresAt  = 0; // Unix ms
 
-async Task<string> GetAccessTokenAsync(HttpClient http)
+async Task<JsonElement> GenerateAccessTokenAsync(HttpClient http, Dictionary<string, object>? extra = null)
 {
-    if (cachedToken != null && DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() < tokenExpiresAt)
-        return cachedToken;
-
     var appId  = Environment.GetEnvironmentVariable("GP_APP_ID")  ?? throw new Exception("GP_APP_ID not set");
     var appKey = Environment.GetEnvironmentVariable("GP_APP_KEY") ?? throw new Exception("GP_APP_KEY not set");
 
     var nonce  = DateTime.UtcNow.ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'");
     var secret = Convert.ToHexString(SHA512.HashData(Encoding.UTF8.GetBytes($"{nonce}{appKey}"))).ToLower();
 
-    var body = JsonSerializer.Serialize(new { app_id = appId, nonce, secret, grant_type = "client_credentials" });
+    var tokenRequest = new Dictionary<string, object>
+    {
+        ["app_id"] = appId,
+        ["nonce"] = nonce,
+        ["secret"] = secret,
+        ["grant_type"] = "client_credentials",
+    };
+    if (extra != null)
+        foreach (var item in extra) tokenRequest[item.Key] = item.Value;
+
+    var body = JsonSerializer.Serialize(tokenRequest);
     var req  = new HttpRequestMessage(HttpMethod.Post, "/ucp/accesstoken")
     {
         Content = new StringContent(body, Encoding.UTF8, "application/json")
@@ -56,6 +65,15 @@ async Task<string> GetAccessTokenAsync(HttpClient http)
     if (!resp.IsSuccessStatusCode)
         throw new Exception($"Token generation failed ({resp.StatusCode}): {json}");
 
+    return doc.Clone();
+}
+
+async Task<string> GetAccessTokenAsync(HttpClient http)
+{
+    if (cachedToken != null && DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() < tokenExpiresAt)
+        return cachedToken;
+
+    var doc = await GenerateAccessTokenAsync(http);
     cachedToken    = doc.GetProperty("token").GetString();
     var expiresIn  = doc.GetProperty("seconds_to_expire").GetInt32();
     tokenExpiresAt = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() + (expiresIn - 60) * 1000L;
@@ -75,7 +93,7 @@ async Task<(JsonElement root, bool ok, int status)> GpRequest(string method, str
     req.Headers.Add("X-GP-Version", "2021-03-22");
 
     if (body != null)
-        req.Content = new StringContent(JsonSerializer.Serialize(body), Encoding.UTF8, "application/json");
+        req.Content = new StringContent(JsonSerializer.Serialize(body, jsonOptions), Encoding.UTF8, "application/json");
 
     var resp = await httpClient.SendAsync(req);
     var json = await resp.Content.ReadAsStringAsync();
@@ -107,12 +125,56 @@ IResult GpError(JsonElement root, int status)
 
 app.MapGet("/api/health", () => Results.Ok(new { status = "ok", backend = "dotnet", version = "1.0.0" }));
 
+app.MapGet("/api/tokenization-config", async () =>
+{
+    try
+    {
+        var token = await GenerateAccessTokenAsync(httpClient, new Dictionary<string, object>
+        {
+            ["permissions"] = new[] { "PMT_POST_Create_Single" },
+            ["restricted_token"] = "YES",
+            ["interval_to_expire"] = "10_MINUTES",
+        });
+        string? tokenizationAccount = null;
+        var tokenizationAccountOverride = Environment.GetEnvironmentVariable("GP_TOKENIZATION_ACCOUNT_NAME");
+        if (token.TryGetProperty("scope", out var scope) &&
+            scope.TryGetProperty("accounts", out var accounts) &&
+            accounts.ValueKind == JsonValueKind.Array &&
+            accounts.GetArrayLength() > 0 &&
+            accounts[0].TryGetProperty("name", out var accountNameFromScope))
+            tokenizationAccount = accountNameFromScope.GetString();
+
+        return Results.Ok(new
+        {
+            success = true,
+            data = new
+            {
+                env = Environment.GetEnvironmentVariable("GP_API_ENVIRONMENT") ?? "sandbox",
+                accessToken = token.GetProperty("token").GetString(),
+                accountName = !string.IsNullOrWhiteSpace(tokenizationAccountOverride)
+                    ? tokenizationAccountOverride
+                    : tokenizationAccount
+                    ?? Environment.GetEnvironmentVariable("GP_ACCOUNT_NAME")
+                    ?? "transaction_processing",
+                merchantId = Environment.GetEnvironmentVariable("GP_MERCHANT_ID"),
+                apiVersion = "2021-03-22"
+            }
+        });
+    }
+    catch (Exception e)
+    {
+        return Results.Json(new { success = false, error = e.Message }, statusCode: 500);
+    }
+});
+
 app.MapPost("/api/check-enrollment", async (HttpRequest req) =>
 {
     var root        = (await JsonDocument.ParseAsync(req.Body)).RootElement;
-    var cardNumber  = root.GetProperty("card_number").GetString();
-    var expMonth    = root.GetProperty("exp_month").GetString();
-    var expYear     = root.GetProperty("exp_year").GetString();
+    string Get(string k, string def = "") => root.TryGetProperty(k, out var v) ? v.GetString() ?? def : def;
+    var cardNumber  = Get("card_number");
+    var expMonth    = Get("exp_month");
+    var expYear     = Get("exp_year");
+    var paymentMethodId = Get("payment_method_id");
     var accountName  = Environment.GetEnvironmentVariable("GP_ACCOUNT_NAME") ?? "transaction_processing";
     var challengeUrl = Environment.GetEnvironmentVariable("CHALLENGE_NOTIFICATION_URL");
     var methodUrl    = Environment.GetEnvironmentVariable("METHOD_NOTIFICATION_URL");
@@ -120,16 +182,20 @@ app.MapPost("/api/check-enrollment", async (HttpRequest req) =>
     var accountId   = Environment.GetEnvironmentVariable("GP_ACCOUNT_ID");
     var merchantId  = Environment.GetEnvironmentVariable("GP_MERCHANT_ID");
 
+    object paymentMethod = !string.IsNullOrEmpty(paymentMethodId)
+        ? new { id = paymentMethodId }
+        : new
+        {
+            entry_mode = "ECOM",
+            card = new { number = cardNumber, expiry_month = expMonth, expiry_year = TwoDigitYear(expYear) }
+        };
+
     var payload = new
     {
         account_name = accountName, account_id = accountId, merchant_id = merchantId,
         channel = "CNP", country = "GB",
         amount = "1000", currency = "GBP", reference = Guid.NewGuid().ToString(),
-        payment_method = new
-        {
-            entry_mode = "ECOM",
-            card = new { number = cardNumber, expiry_month = expMonth, expiry_year = TwoDigitYear(expYear!) }
-        },
+        payment_method = paymentMethod,
         three_ds = new { source = "BROWSER", preference = "NO_PREFERENCE", message_version = "2.2.0" },
         notifications = new { challenge_return_url = challengeUrl, three_ds_method_return_url = methodUrl }
     };
@@ -175,6 +241,7 @@ app.MapPost("/api/initiate-auth", async (HttpRequest req) =>
     var serverTransId       = serverTransIdRaw.StartsWith("AUT_") ? serverTransIdRaw[4..] : serverTransIdRaw;
     var messageVersion      = Get("message_version", "2.1.0");
     var methodUrlCompletion = Get("method_url_completion", "UNAVAILABLE");
+    var paymentMethodId     = Get("payment_method_id");
     var cardNumber          = Get("card_number");
     var expMonth            = Get("exp_month");
     var expYear             = Get("exp_year");
@@ -192,16 +259,20 @@ app.MapPost("/api/initiate-auth", async (HttpRequest req) =>
     var challengeUrl = Environment.GetEnvironmentVariable("CHALLENGE_NOTIFICATION_URL");
     var methodUrl2   = Environment.GetEnvironmentVariable("METHOD_NOTIFICATION_URL");
 
+    object paymentMethod = !string.IsNullOrEmpty(paymentMethodId)
+        ? new { id = paymentMethodId, name = cardholderName, entry_mode = "ECOM" }
+        : new
+        {
+            entry_mode = "ECOM",
+            card = new { number = cardNumber, expiry_month = expMonth, expiry_year = TwoDigitYear(expYear), full_name = cardholderName }
+        };
+
     var payload = new
     {
         account_name = accountName, account_id = accountId2, merchant_id = merchantId2,
         channel = "CNP", country = "GB",
         amount = ToMinorUnits(amount), currency, reference = Guid.NewGuid().ToString(),
-        payment_method = new
-        {
-            entry_mode = "ECOM",
-            card = new { number = cardNumber, expiry_month = expMonth, expiry_year = TwoDigitYear(expYear), full_name = cardholderName }
-        },
+        payment_method = paymentMethod,
         three_ds = new
         {
             source = "BROWSER", preference = "NO_PREFERENCE", message_version = messageVersion,
@@ -250,7 +321,12 @@ app.MapPost("/api/initiate-auth", async (HttpRequest req) =>
             acs_reference_number = Tds("acs_reference_number"),
             acs_trans_id         = Tds("acs_trans_id"),
             acs_signed_content   = Tds("acs_signed_content"),
-            acs_challenge_url    = Tds("acs_challenge_url") ?? Tds("challenge_value")
+            acs_challenge_url    = Tds("acs_challenge_url") ?? Tds("challenge_value"),
+            eci                  = Tds("eci"),
+            authentication_value = Tds("authentication_value"),
+            ds_trans_ref         = Tds("ds_trans_ref"),
+            message_version      = Tds("message_version"),
+            server_trans_ref     = Tds("server_trans_ref") ?? r.GetProperty("id").GetString()
         },
         raw = r
     });
@@ -298,21 +374,36 @@ app.MapPost("/api/authorize-payment", async (HttpRequest req) =>
     var cvn        = Get("cvn");
     var amount     = Get("amount", "10.00");
     var currency   = Get("currency", "GBP");
+    var paymentMethodId = Get("payment_method_id");
+    var cardholderName = Get("cardholder_name", "Test User");
     var tds3       = root.TryGetProperty("three_ds", out var t3) ? t3 : default;
     string? Td(string k) => tds3.ValueKind != JsonValueKind.Undefined && tds3.TryGetProperty(k, out var v) ? v.GetString() : null;
 
     var accountName = Environment.GetEnvironmentVariable("GP_ACCOUNT_NAME") ?? "transaction_processing";
+    var accountId = Environment.GetEnvironmentVariable("GP_ACCOUNT_ID");
+    var merchantId = Environment.GetEnvironmentVariable("GP_MERCHANT_ID");
 
-    var payload = new
-    {
-        account_name = accountName, channel = "CNP", type = "SALE",
-        amount = ToMinorUnits(amount), currency, reference = Guid.NewGuid().ToString(), country = "GB",
-        payment_method = new
+    object paymentMethod = !string.IsNullOrEmpty(paymentMethodId)
+        ? new
+        {
+            id = paymentMethodId,
+            name = cardholderName,
+            entry_mode = "ECOM",
+            authentication = new { id = Get("authentication_id", Td("authentication_id") ?? Td("server_trans_ref") ?? "") }
+        }
+        : new
         {
             entry_mode = "ECOM",
             card = new { number = cardNumber, expiry_month = expMonth, expiry_year = TwoDigitYear(expYear), cvv = cvn }
-        },
-        three_ds = new
+        };
+
+    var payload = new
+    {
+        account_name = accountName, account_id = accountId, merchant_id = merchantId,
+        channel = "CNP", type = "SALE",
+        amount = ToMinorUnits(amount), currency, reference = Guid.NewGuid().ToString(), country = "GB",
+        payment_method = paymentMethod,
+        three_ds = !string.IsNullOrEmpty(paymentMethodId) ? null : new
         {
             source               = "BROWSER",
             authentication_value = Td("authentication_value"),

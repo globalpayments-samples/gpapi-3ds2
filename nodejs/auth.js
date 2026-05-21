@@ -17,6 +17,17 @@ let tokenExpiresAt = 0;
  * Generate a new bearer token from GP-API /accesstoken.
  */
 async function generateToken() {
+  const data = await generateAccessToken();
+
+  // data.token already includes the value; type is "Bearer"
+  cachedToken    = data.token;
+  tokenExpiresAt = Date.now() + (data.seconds_to_expire - 60) * 1000;
+
+  console.log(`[auth] New token obtained, expires in ${data.seconds_to_expire}s`);
+  return cachedToken;
+}
+
+async function generateAccessToken(overrides = {}) {
   const appId  = process.env.GP_APP_ID;
   const appKey = process.env.GP_APP_KEY;
 
@@ -38,6 +49,7 @@ async function generateToken() {
       nonce,
       secret,
       grant_type: 'client_credentials',
+      ...overrides,
     }),
   });
 
@@ -48,12 +60,16 @@ async function generateToken() {
 
   const data = await response.json();
 
-  // data.token already includes the value; type is "Bearer"
-  cachedToken    = data.token;
-  tokenExpiresAt = Date.now() + (data.seconds_to_expire - 60) * 1000;
+  return data;
+}
 
-  console.log(`[auth] New token obtained, expires in ${data.seconds_to_expire}s`);
-  return cachedToken;
+export async function getTokenizationAccessToken() {
+  const data = await generateAccessToken({
+    permissions: ['PMT_POST_Create_Single'],
+    restricted_token: 'YES',
+    interval_to_expire: '10_MINUTES',
+  });
+  return data;
 }
 
 /**

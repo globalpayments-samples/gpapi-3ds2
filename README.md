@@ -2,7 +2,7 @@
 
 A 3DS2 testing platform for the Global Payments Unified Commerce Platform (UCP). Four backend implementations (Node.js, PHP, .NET, Java) expose the same API, so you can swap runtimes without touching the frontend.
 
-No GP SDK is used — all backends talk directly to `https://apis.sandbox.globalpay.com/ucp` over plain HTTP.
+The default browser flow uses Global Payments Hosted Fields for single-use tokenization, then sends the payment method reference through the GP-API 3DS2 flow. A diagnostic raw-card API mode remains available for sandbox troubleshooting only.
 
 ---
 
@@ -52,19 +52,23 @@ GP_APP_KEY=
 GP_MERCHANT_ID=
 GP_ACCOUNT_NAME=transaction_processing
 GP_ACCOUNT_ID=
+GP_API_ENVIRONMENT=sandbox
+GP_TOKENIZATION_ACCOUNT_NAME=
 ```
 
 `GP_ACCOUNT_NAME` is case-sensitive — use the exact value shown in your developer portal.
+`GP_TOKENIZATION_ACCOUNT_NAME` is optional. Leave it blank to use the tokenization account returned in the restricted token scope.
 
 ---
 
 ## API Endpoints
 
-All four backends expose the same five routes:
+All four backends expose the same six routes:
 
 | Method | Path                    | Description                        |
 |--------|-------------------------|------------------------------------|
 | GET    | `/api/health`           | Returns backend name and status    |
+| GET    | `/api/tokenization-config` | Returns a restricted Hosted Fields token |
 | POST   | `/api/check-enrollment` | Step 1 — card enrollment check     |
 | POST   | `/api/initiate-auth`    | Step 2 — 3DS method + auth request |
 | POST   | `/api/get-auth-result`  | Step 3 — poll authentication result|
@@ -99,6 +103,8 @@ POST /ucp/accesstoken { app_id, nonce, secret, grant_type: "client_credentials" 
 
 Tokens are cached and refreshed when under 60 seconds to expiry.
 
+Hosted Fields uses a separate short-lived restricted token with `PMT_POST_Create_Single` permission. That token is intentionally not cached long-term.
+
 ---
 
 ## Running the CLI Smoke Test
@@ -113,7 +119,8 @@ Runs all 6 test cards through all 4 steps and reports pass/fail per card.
 
 ## Known Sandbox Limitations
 
-- `GET /authentications/{id}` returns error 40212 — the sandbox credentials don't have read permission on that resource. This needs to be enabled by the GP-API team.
+- Authentication can remain in `AVAILABLE` when the method notification has not produced a final 3DS result. The UI now stops at that state instead of polling `GET /authentications/{id}` prematurely.
+- Direct `GET /authentications/{id}` calls can still return HTTP 403 / error 40212 in sandbox. If final-result polling is required for a challenge flow, confirm the exact GP-API result endpoint and account action configuration with the GP-API team.
 - `initiate-auth` returns `AVAILABLE` instead of `SUCCESS_AUTHENTICATED` for frictionless cards — the sandbox 3DS Server doesn't recognise `developer.globalpayments.com` as a trusted method notification URL. A public `three_ds_method_return_url` on GP-API infrastructure is needed to get true frictionless success.
 
 These are sandbox account limitations, not bugs in the code.

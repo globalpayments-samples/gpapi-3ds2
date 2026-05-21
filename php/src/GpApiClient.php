@@ -41,24 +41,7 @@ class GpApiClient
 
     private static function generateToken(): string
     {
-        $appId  = getenv('GP_APP_ID');
-        $appKey = getenv('GP_APP_KEY');
-
-        if (!$appId || !$appKey) {
-            throw new \RuntimeException('GP_APP_ID and GP_APP_KEY must be set');
-        }
-
-        $nonce  = gmdate('Y-m-d\TH:i:s') . '.' . sprintf('%03d', (int)(microtime(true) * 1000) % 1000) . 'Z';
-        $secret = hash('sha512', $nonce . $appKey);
-
-        $body = json_encode([
-            'app_id'     => $appId,
-            'nonce'      => $nonce,
-            'secret'     => $secret,
-            'grant_type' => 'client_credentials',
-        ]);
-
-        $result = self::curlRequest('POST', '/accesstoken', $body, null);
+        $result = self::generateAccessToken();
 
         if (empty($result['token'])) {
             throw new \RuntimeException('Token generation failed: ' . json_encode($result));
@@ -71,6 +54,46 @@ class GpApiClient
         ]));
 
         return $result['token'];
+    }
+
+    public static function getTokenizationAccessToken(): string
+    {
+        $result = self::getTokenizationAccessTokenData();
+        if (empty($result['token'])) {
+            throw new \RuntimeException('Token generation failed: ' . json_encode($result));
+        }
+        return $result['token'];
+    }
+
+    public static function getTokenizationAccessTokenData(): array
+    {
+        return self::generateAccessToken([
+            'permissions' => ['PMT_POST_Create_Single'],
+            'restricted_token' => 'YES',
+            'interval_to_expire' => '10_MINUTES',
+        ]);
+    }
+
+    private static function generateAccessToken(array $extra = []): array
+    {
+        $appId  = getenv('GP_APP_ID');
+        $appKey = getenv('GP_APP_KEY');
+
+        if (!$appId || !$appKey) {
+            throw new \RuntimeException('GP_APP_ID and GP_APP_KEY must be set');
+        }
+
+        $nonce  = gmdate('Y-m-d\TH:i:s') . '.' . sprintf('%03d', (int)(microtime(true) * 1000) % 1000) . 'Z';
+        $secret = hash('sha512', $nonce . $appKey);
+
+        $body = json_encode(array_merge([
+            'app_id'     => $appId,
+            'nonce'      => $nonce,
+            'secret'     => $secret,
+            'grant_type' => 'client_credentials',
+        ], $extra));
+
+        return self::curlRequest('POST', '/accesstoken', $body, null);
     }
 
     // ── HTTP helpers ───────────────────────────────────────────────────────

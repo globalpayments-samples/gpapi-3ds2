@@ -36,6 +36,7 @@ import java.util.stream.Collectors;
  */
 @WebServlet(urlPatterns = {
     "/api/health",
+    "/api/tokenization-config",
     "/api/check-enrollment",
     "/api/initiate-auth",
     "/api/get-auth-result",
@@ -87,6 +88,23 @@ public class GpApi3dsServlet extends HttpServlet {
 
         if ("/api/health".equals(req.getServletPath())) {
             res.getWriter().write("{\"status\":\"ok\",\"backend\":\"java\",\"version\":\"1.0.0\"}");
+        } else if ("/api/tokenization-config".equals(req.getServletPath())) {
+            try {
+                JsonNode token = getTokenizationAccessTokenData();
+                String tokenizationAccount = token.path("scope").path("accounts").path(0).path("name").asText(null);
+                ObjectNode data = MAPPER.createObjectNode();
+                data.put("env", env("GP_API_ENVIRONMENT", "sandbox"));
+                data.put("accessToken", token.path("token").asText());
+                data.put("accountName", env("GP_TOKENIZATION_ACCOUNT_NAME", tokenizationAccount != null ? tokenizationAccount : env("GP_ACCOUNT_NAME", "transaction_processing")));
+                data.put("merchantId", env("GP_MERCHANT_ID", ""));
+                data.put("apiVersion", GP_VERSION);
+                ObjectNode out = MAPPER.createObjectNode();
+                out.put("success", true);
+                out.set("data", data);
+                res.getWriter().write(MAPPER.writeValueAsString(out));
+            } catch (Exception e) {
+                writeError(res, e);
+            }
         } else {
             res.setStatus(404);
             res.getWriter().write("{\"error\":\"Not found\"}");
@@ -121,6 +139,7 @@ public class GpApi3dsServlet extends HttpServlet {
         String cardNumber = text(in, "card_number");
         String expMonth   = text(in, "exp_month");
         String expYear    = text(in, "exp_year");
+        String paymentMethodId = text(in, "payment_method_id");
 
         ObjectNode payload = MAPPER.createObjectNode();
         payload.put("account_name", env("GP_ACCOUNT_NAME", "transaction_processing"));
@@ -133,12 +152,16 @@ public class GpApi3dsServlet extends HttpServlet {
         payload.put("amount",   "1000");
         payload.put("currency", "GBP");
         payload.put("reference", UUID.randomUUID().toString());
-        payload.putObject("payment_method")
-               .put("entry_mode", "ECOM")
-               .putObject("card")
-               .put("number",       cardNumber)
-               .put("expiry_month", expMonth)
-               .put("expiry_year",  twoDigitYear(expYear));
+        ObjectNode paymentMethod = payload.putObject("payment_method");
+        if (paymentMethodId != null && !paymentMethodId.isEmpty()) {
+            paymentMethod.put("id", paymentMethodId);
+        } else {
+            paymentMethod.put("entry_mode", "ECOM")
+                   .putObject("card")
+                   .put("number",       cardNumber)
+                   .put("expiry_month", expMonth)
+                   .put("expiry_year",  twoDigitYear(expYear));
+        }
         payload.putObject("three_ds")
                .put("source",          "BROWSER")
                .put("preference",      "NO_PREFERENCE")
@@ -177,6 +200,7 @@ public class GpApi3dsServlet extends HttpServlet {
         String serverTransId       = serverTransIdRaw.startsWith("AUT_") ? serverTransIdRaw.substring(4) : serverTransIdRaw;
         String messageVersion      = textOr(in, "message_version", "2.1.0");
         String methodUrlCompletion = textOr(in, "method_url_completion", "UNAVAILABLE");
+        String paymentMethodId     = text(in, "payment_method_id");
         String cardNumber          = text(in, "card_number");
         String expMonth            = text(in, "exp_month");
         String expYear             = text(in, "exp_year");
@@ -197,13 +221,19 @@ public class GpApi3dsServlet extends HttpServlet {
         payload.put("amount",    toMinorUnits(amount));
         payload.put("currency",  currency);
         payload.put("reference", UUID.randomUUID().toString());
-        payload.putObject("payment_method")
-               .put("entry_mode", "ECOM")
-               .putObject("card")
-               .put("number",       cardNumber)
-               .put("expiry_month", expMonth)
-               .put("expiry_year",  twoDigitYear(expYear))
-               .put("full_name",    cardholderName);
+        ObjectNode paymentMethod = payload.putObject("payment_method");
+        if (paymentMethodId != null && !paymentMethodId.isEmpty()) {
+            paymentMethod.put("id", paymentMethodId);
+            paymentMethod.put("name", cardholderName);
+            paymentMethod.put("entry_mode", "ECOM");
+        } else {
+            paymentMethod.put("entry_mode", "ECOM")
+                   .putObject("card")
+                   .put("number",       cardNumber)
+                   .put("expiry_month", expMonth)
+                   .put("expiry_year",  twoDigitYear(expYear))
+                   .put("full_name",    cardholderName);
+        }
         payload.putObject("three_ds")
                .put("source",                "BROWSER")
                .put("preference",            "NO_PREFERENCE")
@@ -251,6 +281,11 @@ public class GpApi3dsServlet extends HttpServlet {
         String challengeUrl = tds.has("acs_challenge_url") ? tds.path("acs_challenge_url").asText(null)
                             : tds.path("challenge_value").asText(null);
         data.put("acs_challenge_url", challengeUrl);
+        data.put("eci",                  tds.path("eci").asText(null));
+        data.put("authentication_value", tds.path("authentication_value").asText(null));
+        data.put("ds_trans_ref",         tds.path("ds_trans_ref").asText(null));
+        data.put("message_version",      tds.path("message_version").asText(null));
+        data.put("server_trans_ref",     tds.has("server_trans_ref") ? tds.path("server_trans_ref").asText() : raw.path("id").asText());
 
         writeSuccess(res, data, raw);
     }
@@ -285,30 +320,44 @@ public class GpApi3dsServlet extends HttpServlet {
         String cvn        = textOr(in, "cvn", "");
         String amount     = textOr(in, "amount",   "10.00");
         String currency   = textOr(in, "currency", "GBP");
+        String paymentMethodId = text(in, "payment_method_id");
         JsonNode tds3     = in.path("three_ds");
+        String authenticationId = textOr(in, "authentication_id", tds3.path("authentication_id").asText(tds3.path("server_trans_ref").asText(null)));
+        String cardholderName = textOr(in, "cardholder_name", "Test User");
 
         ObjectNode payload = MAPPER.createObjectNode();
         payload.put("account_name", env("GP_ACCOUNT_NAME", "transaction_processing"));
+        String accountId = env("GP_ACCOUNT_ID", "");
+        if (!accountId.isEmpty()) payload.put("account_id", accountId);
+        String merchantId = env("GP_MERCHANT_ID", "");
+        if (!merchantId.isEmpty()) payload.put("merchant_id", merchantId);
         payload.put("channel",   "CNP");
         payload.put("type",      "SALE");
         payload.put("amount",    toMinorUnits(amount));
         payload.put("currency",  currency);
         payload.put("reference", UUID.randomUUID().toString());
         payload.put("country",   "GB");
-        payload.putObject("payment_method")
-               .put("entry_mode", "ECOM")
-               .putObject("card")
-               .put("number",       cardNumber)
-               .put("expiry_month", expMonth)
-               .put("expiry_year",  twoDigitYear(expYear))
-               .put("cvv",          cvn);
-        payload.putObject("three_ds")
-               .put("source",               "BROWSER")
-               .put("authentication_value", tds3.path("authentication_value").asText(null))
-               .put("server_trans_ref",     tds3.path("server_trans_ref").asText(null))
-               .put("ds_trans_ref",         tds3.path("ds_trans_ref").asText(null))
-               .put("eci",                  tds3.path("eci").asText(null))
-               .put("message_version",      tds3.path("message_version").asText("2.2.0"));
+        ObjectNode paymentMethod = payload.putObject("payment_method");
+        if (paymentMethodId != null && !paymentMethodId.isEmpty()) {
+            paymentMethod.put("id", paymentMethodId);
+            paymentMethod.put("name", cardholderName);
+            paymentMethod.put("entry_mode", "ECOM");
+            paymentMethod.putObject("authentication").put("id", authenticationId);
+        } else {
+            paymentMethod.put("entry_mode", "ECOM")
+                   .putObject("card")
+                   .put("number",       cardNumber)
+                   .put("expiry_month", expMonth)
+                   .put("expiry_year",  twoDigitYear(expYear))
+                   .put("cvv",          cvn);
+            payload.putObject("three_ds")
+                   .put("source",               "BROWSER")
+                   .put("authentication_value", tds3.path("authentication_value").asText(null))
+                   .put("server_trans_ref",     tds3.path("server_trans_ref").asText(null))
+                   .put("ds_trans_ref",         tds3.path("ds_trans_ref").asText(null))
+                   .put("eci",                  tds3.path("eci").asText(null))
+                   .put("message_version",      tds3.path("message_version").asText("2.2.0"));
+        }
 
         JsonNode raw = gpPost("/transactions", payload);
 
@@ -379,6 +428,26 @@ public class GpApi3dsServlet extends HttpServlet {
     }
 
     private String generateToken() throws Exception {
+        JsonNode result  = generateAccessToken(null);
+        cachedToken      = result.get("token").asText();
+        int expiresIn    = result.path("seconds_to_expire").asInt(3599);
+        tokenExpiresAt   = System.currentTimeMillis() + (expiresIn - 60) * 1000L;
+        return cachedToken;
+    }
+
+    private String getTokenizationAccessToken() throws Exception {
+        return getTokenizationAccessTokenData().get("token").asText();
+    }
+
+    private JsonNode getTokenizationAccessTokenData() throws Exception {
+        ObjectNode extra = MAPPER.createObjectNode();
+        extra.putArray("permissions").add("PMT_POST_Create_Single");
+        extra.put("restricted_token", "YES");
+        extra.put("interval_to_expire", "10_MINUTES");
+        return generateAccessToken(extra);
+    }
+
+    private JsonNode generateAccessToken(ObjectNode extra) throws Exception {
         String appId  = env("GP_APP_ID",  "");
         String appKey = env("GP_APP_KEY", "");
         if (appId.isEmpty() || appKey.isEmpty()) throw new Exception("GP_APP_ID and GP_APP_KEY must be set");
@@ -391,6 +460,9 @@ public class GpApi3dsServlet extends HttpServlet {
         body.put("nonce",      nonce);
         body.put("secret",     secret);
         body.put("grant_type", "client_credentials");
+        if (extra != null) {
+            extra.fields().forEachRemaining(entry -> body.set(entry.getKey(), entry.getValue()));
+        }
 
         HttpRequest req = HttpRequest.newBuilder()
             .uri(URI.create(BASE_URL + "/accesstoken"))
@@ -405,11 +477,7 @@ public class GpApi3dsServlet extends HttpServlet {
             throw new Exception("Token generation failed (" + resp.statusCode() + "): " + tokenBody);
         }
 
-        JsonNode result  = MAPPER.readTree(tokenBody);
-        cachedToken      = result.get("token").asText();
-        int expiresIn    = result.path("seconds_to_expire").asInt(3599);
-        tokenExpiresAt   = System.currentTimeMillis() + (expiresIn - 60) * 1000L;
-        return cachedToken;
+        return MAPPER.readTree(tokenBody);
     }
 
     // ── HTTP helpers ─────────────────────────────────────────────────────────

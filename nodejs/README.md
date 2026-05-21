@@ -1,6 +1,6 @@
 # Node.js Backend
 
-Express server written as ES modules, using Node 18's built-in `fetch`. No GP SDK — all GP-API calls go out as plain HTTP requests.
+Express server written as ES modules, using Node 18's built-in `fetch`. GP-API calls go out as plain HTTP requests, while the browser uses Hosted Fields for single-use tokenization.
 
 Runs on port **3001** (Docker host port **8001**).
 
@@ -40,6 +40,8 @@ GP_APP_KEY=
 GP_MERCHANT_ID=
 GP_ACCOUNT_NAME=transaction_processing
 GP_ACCOUNT_ID=
+GP_API_ENVIRONMENT=sandbox
+GP_TOKENIZATION_ACCOUNT_NAME=
 PORT=3001
 ```
 
@@ -49,6 +51,7 @@ PORT=3001
 
 ```
 GET  /api/health
+GET  /api/tokenization-config
 POST /api/check-enrollment
 POST /api/initiate-auth
 POST /api/get-auth-result

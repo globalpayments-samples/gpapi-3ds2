@@ -8,7 +8,7 @@
 import express from 'express';
 import * as dotenv from 'dotenv';
 import { randomUUID } from 'crypto';
-import { getAccessToken, GP_API_BASE, GP_VERSION } from './auth.js';
+import { getAccessToken, getTokenizationAccessToken, GP_API_BASE, GP_VERSION } from './auth.js';
 
 dotenv.config();
 
@@ -83,13 +83,33 @@ app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', backend: 'nodejs', version: '1.0.0' });
 });
 
+/** GET /api/tokenization-config */
+app.get('/api/tokenization-config', async (_req, res) => {
+  try {
+    const token = await getTokenizationAccessToken();
+    const tokenizationAccount = token.scope?.accounts?.[0]?.name;
+    res.json({
+      success: true,
+      data: {
+        env: process.env.GP_API_ENVIRONMENT || 'sandbox',
+        accessToken: token.token,
+        accountName: process.env.GP_TOKENIZATION_ACCOUNT_NAME || tokenizationAccount || process.env.GP_ACCOUNT_NAME || 'transaction_processing',
+        merchantId: process.env.GP_MERCHANT_ID,
+        apiVersion: GP_VERSION,
+      },
+    });
+  } catch (err) {
+    errorResponse(res, err);
+  }
+});
+
 /**
  * POST /api/check-enrollment
  * Step 1 — Check card availability (CHECK_AVAILABILITY / enrollment check).
  */
 app.post('/api/check-enrollment', async (req, res) => {
   try {
-    const { card_number, exp_month, exp_year } = req.body;
+    const { card_number, exp_month, exp_year, payment_method_id } = req.body;
 
     const payload = {
       account_name: process.env.GP_ACCOUNT_NAME || 'transaction_processing',
@@ -100,7 +120,9 @@ app.post('/api/check-enrollment', async (req, res) => {
       amount:       '1000',
       currency:     'GBP',
       reference:    randomUUID(),
-      payment_method: {
+      payment_method: payment_method_id ? {
+        id: payment_method_id,
+      } : {
         entry_mode: 'ECOM',
         card: {
           number:       card_number,
@@ -148,6 +170,7 @@ app.post('/api/initiate-auth', async (req, res) => {
       server_trans_id,
       message_version,
       method_url_completion,
+      payment_method_id,
       card_number,
       exp_month,
       exp_year,
@@ -168,7 +191,11 @@ app.post('/api/initiate-auth', async (req, res) => {
       amount:       toMinorUnits(order?.amount || '10.00'),
       currency:     order?.currency || 'GBP',
       reference:    randomUUID(),
-      payment_method: {
+      payment_method: payment_method_id ? {
+        id: payment_method_id,
+        name: cardholder_name || 'Test User',
+        entry_mode: 'ECOM',
+      } : {
         entry_mode: 'ECOM',
         card: {
           number:       card_number,
@@ -230,6 +257,11 @@ app.post('/api/initiate-auth', async (req, res) => {
         acs_trans_id:         raw.three_ds?.acs_trans_id,
         acs_signed_content:   raw.three_ds?.acs_signed_content,
         acs_challenge_url:    raw.three_ds?.acs_challenge_url || raw.three_ds?.challenge_value,
+        eci:                  raw.three_ds?.eci,
+        authentication_value: raw.three_ds?.authentication_value,
+        ds_trans_ref:         raw.three_ds?.ds_trans_ref,
+        message_version:      raw.three_ds?.message_version,
+        server_trans_ref:     raw.three_ds?.server_trans_ref || raw.id,
       },
       raw,
     });
@@ -280,7 +312,7 @@ app.post('/api/get-auth-result', async (req, res) => {
  */
 app.post('/api/authorize-payment', async (req, res) => {
   try {
-    const { card_number, exp_month, exp_year, cvn, amount, currency, three_ds } = req.body;
+    const { card_number, exp_month, exp_year, cvn, amount, currency, three_ds, payment_method_id, authentication_id, cardholder_name } = req.body;
 
     const payload = {
       account_name: process.env.GP_ACCOUNT_NAME || 'transaction_processing',
@@ -292,7 +324,14 @@ app.post('/api/authorize-payment', async (req, res) => {
       currency:     currency || 'GBP',
       reference:    randomUUID(),
       country:      'GB',
-      payment_method: {
+      payment_method: payment_method_id ? {
+        id: payment_method_id,
+        name: cardholder_name || 'Test User',
+        entry_mode: 'ECOM',
+        authentication: {
+          id: authentication_id || three_ds?.authentication_id || three_ds?.server_trans_ref,
+        },
+      } : {
         entry_mode: 'ECOM',
         card: {
           number:       card_number,
@@ -301,7 +340,7 @@ app.post('/api/authorize-payment', async (req, res) => {
           cvv:          cvn,
         },
       },
-      three_ds: {
+      three_ds: payment_method_id ? undefined : {
         source:               'BROWSER',
         authentication_value: three_ds?.authentication_value,
         server_trans_ref:     three_ds?.server_trans_ref,
