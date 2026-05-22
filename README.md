@@ -31,7 +31,18 @@ Open the frontend, pick a backend from the dropdown, and run through the 3DS2 fl
 
 ## Running Natively
 
-Each backend can run without Docker. See the README in each subfolder for the specific commands.
+Use the root helper script for local development and verification:
+
+```bash
+./run.sh check             # syntax/build checks
+./run.sh dev node          # frontend + Node backend for browser testing
+./run.sh smoke node        # starts Node, runs real GP-API smoke test, stops Node
+./run.sh smoke all         # runs the smoke test across all four backends
+```
+
+`./run.sh dev <backend>` starts the frontend at `http://localhost:8000` and the selected backend. Open the frontend, choose the matching backend in the dropdown, and run through the Hosted Fields flow.
+
+Each backend can also run without the helper script. See the README in each subfolder for the specific commands.
 
 ```
 nodejs/   Node 18+, Express
@@ -110,7 +121,8 @@ Hosted Fields uses a separate short-lived restricted token with `PMT_POST_Create
 ## Running the CLI Smoke Test
 
 ```bash
-./test-all-cards.sh 3001 nodejs   # or 8003/php, 8006/dotnet, 8004/java
+./run.sh smoke node        # preferred
+./test-all-cards.sh 3001 nodejs   # lower-level script if a backend is already running
 ```
 
 Runs all 6 test cards through all 4 steps and reports pass/fail per card.
