@@ -238,7 +238,8 @@ app.MapPost("/api/initiate-auth", async (HttpRequest req) =>
 
     string Get(string k, string def = "") => root.TryGetProperty(k, out var v) ? v.GetString() ?? def : def;
     var serverTransIdRaw    = Get("server_trans_id");
-    var serverTransId       = serverTransIdRaw.StartsWith("AUT_") ? serverTransIdRaw[4..] : serverTransIdRaw;
+    var authenticationId    = serverTransIdRaw.Trim();
+    var serverTransId       = authenticationId.StartsWith("AUT_") ? authenticationId[4..] : authenticationId;
     var messageVersion      = Get("message_version", "2.1.0");
     var methodUrlCompletion = Get("method_url_completion", "UNAVAILABLE");
     var paymentMethodId     = Get("payment_method_id");
@@ -305,7 +306,7 @@ app.MapPost("/api/initiate-auth", async (HttpRequest req) =>
         notifications = new { challenge_return_url = challengeUrl, three_ds_method_return_url = methodUrl2 }
     };
 
-    var (r, ok, status) = await GpRequest("POST", "/ucp/authentications", payload);
+    var (r, ok, status) = await GpRequest("POST", $"/ucp/authentications/{Uri.EscapeDataString(authenticationId)}/initiate", payload);
     if (!ok) return GpError(r, status);
 
     var tds = r.TryGetProperty("three_ds", out var t) ? t : default;
@@ -336,12 +337,12 @@ app.MapPost("/api/get-auth-result", async (HttpRequest req) =>
 {
     var root          = (await JsonDocument.ParseAsync(req.Body)).RootElement;
     var serverTransIdRaw = root.GetProperty("server_trans_id").GetString();
-    var serverTransId    = serverTransIdRaw?.StartsWith("AUT_") == true ? serverTransIdRaw[4..] : serverTransIdRaw;
+    var serverTransId    = serverTransIdRaw?.Trim();
 
     if (string.IsNullOrEmpty(serverTransId))
         return Results.BadRequest(new { success = false, error = "server_trans_id is required" });
 
-    var (r, ok, status) = await GpRequest("GET", $"/ucp/authentications/{serverTransId}");
+    var (r, ok, status) = await GpRequest("GET", $"/ucp/authentications/{Uri.EscapeDataString(serverTransId)}/result");
     if (!ok) return GpError(r, status);
 
     var tds = r.TryGetProperty("three_ds", out var t) ? t : default;

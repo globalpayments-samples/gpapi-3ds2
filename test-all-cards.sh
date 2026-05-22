@@ -5,11 +5,9 @@
 #
 # NOTE: CLI limitations —
 #   - Device fingerprint (method URL) cannot execute without a browser.
-#   - Therefore initiate-auth always returns status=AVAILABLE in headless mode.
-#   - Challenge completion and final ECI/auth-value require a browser session.
+#   - Challenge completion still requires a browser session.
 #   - This script verifies API connectivity, token auth, enrollment, and that
-#     initiate-auth completes without error. Full frictionless/challenge outcome
-#     can only be confirmed in the browser UI.
+#     initiate-auth completes without error.
 
 set -euo pipefail
 
@@ -146,8 +144,7 @@ run_card_test() {
     return
   fi
 
-  # AVAILABLE is the expected intermediate status in CLI (no browser fingerprint)
-  info "Initiate auth: status=${auth_status} (AVAILABLE expected in headless mode)"
+  info "Initiate auth: status=${auth_status}"
   pass "Initiate auth: no error"
 
   echo ""

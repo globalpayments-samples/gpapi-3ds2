@@ -10,7 +10,8 @@ $dotenv->load();
 $input = json_decode(file_get_contents('php://input'), true) ?? [];
 
 $serverTransIdRaw    = $input['server_trans_id']        ?? '';
-$serverTransId       = preg_replace('/^AUT_/', '', $serverTransIdRaw);
+$authenticationId    = trim((string) $serverTransIdRaw);
+$serverTransRef      = preg_replace('/^AUT_/', '', $authenticationId);
 $messageVersion      = $input['message_version']         ?? '2.1.0';
 $methodUrlCompletion = $input['method_url_completion']   ?? 'UNAVAILABLE';
 $paymentMethodId     = $input['payment_method_id']       ?? null;
@@ -23,8 +24,18 @@ $order               = $input['order']                   ?? [];
 $amount              = $order['amount']                  ?? '10.00';
 $currency            = $order['currency']                ?? 'GBP';
 
+$browserValue = static function (array $data, string $key, string $default): string {
+    if (!array_key_exists($key, $data)) {
+        return $default;
+    }
+    if (is_bool($data[$key])) {
+        return $data[$key] ? 'true' : 'false';
+    }
+    return (string) $data[$key];
+};
+
 try {
-    $raw = GpApiClient::request('POST', '/authentications', [
+    $raw = GpApiClient::request('POST', '/authentications/' . rawurlencode($authenticationId) . '/initiate', [
         'account_name' => getenv('GP_ACCOUNT_NAME') ?: 'transaction_processing',
         'account_id'   => getenv('GP_ACCOUNT_ID') ?: null,
         'merchant_id'  => getenv('GP_MERCHANT_ID') ?: null,
@@ -50,7 +61,7 @@ try {
             'source'               => 'BROWSER',
             'preference'           => 'NO_PREFERENCE',
             'message_version'      => $messageVersion,
-            'server_trans_ref'     => $serverTransId,
+            'server_trans_ref'     => $serverTransRef,
             'method_url_completion' => $methodUrlCompletion,
         ],
         'order' => [
@@ -70,17 +81,17 @@ try {
             ],
         ],
         'browser_data' => [
-            'accept_header'        => $browserData['accept_header']        ?? 'text/html,application/xhtml+xml',
-            'color_depth'          => (string) ($browserData['color_depth']       ?? '24'),
-            'ip'                   => $browserData['ip']                   ?? '123.123.123.123',
-            'java_enabled'         => (string) ($browserData['java_enabled']      ?? 'false'),
-            'javascript_enabled'   => (string) ($browserData['javascript_enabled'] ?? 'true'),
-            'language'             => $browserData['language']             ?? 'en-GB',
-            'screen_height'        => (string) ($browserData['screen_height']     ?? '1080'),
-            'screen_width'         => (string) ($browserData['screen_width']      ?? '1920'),
-            'challenge_window_size' => $browserData['challenge_window_size'] ?? 'FULL_SCREEN',
-            'timezone'             => (string) ($browserData['timezone']          ?? '0'),
-            'user_agent'           => $browserData['user_agent']           ?? 'Mozilla/5.0',
+            'accept_header'         => $browserValue($browserData, 'accept_header', 'text/html,application/xhtml+xml'),
+            'color_depth'           => $browserValue($browserData, 'color_depth', '24'),
+            'ip'                    => $browserValue($browserData, 'ip', '123.123.123.123'),
+            'java_enabled'          => $browserValue($browserData, 'java_enabled', 'false'),
+            'javascript_enabled'    => $browserValue($browserData, 'javascript_enabled', 'true'),
+            'language'              => $browserValue($browserData, 'language', 'en-GB'),
+            'screen_height'         => $browserValue($browserData, 'screen_height', '1080'),
+            'screen_width'          => $browserValue($browserData, 'screen_width', '1920'),
+            'challenge_window_size' => $browserValue($browserData, 'challenge_window_size', 'FULL_SCREEN'),
+            'timezone'              => $browserValue($browserData, 'timezone', '0'),
+            'user_agent'            => $browserValue($browserData, 'user_agent', 'Mozilla/5.0'),
         ],
         'notifications' => [
             'challenge_return_url'       => getenv('CHALLENGE_NOTIFICATION_URL'),

@@ -117,10 +117,9 @@ Runs all 6 test cards through all 4 steps and reports pass/fail per card.
 
 ---
 
-## Known Sandbox Limitations
+## Authentication Result Flow
 
-- Authentication can remain in `AVAILABLE` when the method notification has not produced a final 3DS result. The UI now stops at that state instead of polling `GET /authentications/{id}` prematurely.
-- Direct `GET /authentications/{id}` calls can still return HTTP 403 / error 40212 in sandbox. If final-result polling is required for a challenge flow, confirm the exact GP-API result endpoint and account action configuration with the GP-API team.
-- `initiate-auth` returns `AVAILABLE` instead of `SUCCESS_AUTHENTICATED` for frictionless cards — the sandbox 3DS Server doesn't recognise `developer.globalpayments.com` as a trusted method notification URL. A public `three_ds_method_return_url` on GP-API infrastructure is needed to get true frictionless success.
-
-These are sandbox account limitations, not bugs in the code.
+- Enrollment check creates the authentication resource with `POST /authentications`.
+- Initiation must continue the same resource with `POST /authentications/{AUT_ID}/initiate`.
+- Result polling must use `GET /authentications/{AUT_ID}/result`.
+- Keep the `AUT_` prefix for resource URLs and transaction authorization. The bare `three_ds.server_trans_ref` is not a replacement for the authentication resource ID.

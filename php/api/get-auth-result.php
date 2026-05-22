@@ -9,14 +9,14 @@ $dotenv->load();
 
 $input         = json_decode(file_get_contents('php://input'), true) ?? [];
 $serverTransIdRaw = $input['server_trans_id'] ?? '';
-$serverTransId    = preg_replace('/^AUT_/', '', $serverTransIdRaw);
+$serverTransId    = trim((string) $serverTransIdRaw);
 
 if (!$serverTransId) {
     GpApiClient::jsonResponse(['success' => false, 'error' => 'server_trans_id is required'], 400);
 }
 
 try {
-    $raw = GpApiClient::request('GET', '/authentications/' . urlencode($serverTransId));
+    $raw = GpApiClient::request('GET', '/authentications/' . rawurlencode($serverTransId) . '/result');
 
     GpApiClient::jsonResponse([
         'success' => true,

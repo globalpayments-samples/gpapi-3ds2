@@ -958,15 +958,16 @@ async function runApiFlow({ payment_method_id = null, token_raw = null }) {
 
     // ── Step 6: Authorize Payment ──────────────────────────────────────────
     setStep(6, 'active');
+    const authenticationId = state.authData.server_trans_id || state.serverTransId || r5.data.server_trans_ref;
     const r6 = await api('/api/authorize-payment', {
       payment_method_id,
-      authentication_id: r5.data.server_trans_ref || state.authData.server_trans_id,
+      authentication_id: authenticationId,
       card_number, exp_month, exp_year, cvn, amount, currency, cardholder_name,
       three_ds: {
-        authentication_id: r5.data.server_trans_ref || state.authData.server_trans_id,
+        authentication_id: authenticationId,
         authentication_value: r5.data.authentication_value,
         eci:                  r5.data.eci,
-        server_trans_ref:     r5.data.server_trans_ref || state.serverTransId,
+        server_trans_ref:     authenticationId,
         ds_trans_ref:         r5.data.ds_trans_ref,
         message_version:      r5.data.message_version || '2.2.0',
       },

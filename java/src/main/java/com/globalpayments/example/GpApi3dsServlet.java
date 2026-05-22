@@ -16,6 +16,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.zip.GZIPInputStream;
 import java.net.URI;
+import java.net.URLEncoder;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
@@ -197,7 +198,8 @@ public class GpApi3dsServlet extends HttpServlet {
 
     private void handleInitiateAuth(JsonNode in, HttpServletResponse res) throws Exception {
         String serverTransIdRaw    = textOr(in, "server_trans_id", "");
-        String serverTransId       = serverTransIdRaw.startsWith("AUT_") ? serverTransIdRaw.substring(4) : serverTransIdRaw;
+        String authenticationId    = serverTransIdRaw.trim();
+        String serverTransId       = authenticationId.startsWith("AUT_") ? authenticationId.substring(4) : authenticationId;
         String messageVersion      = textOr(in, "message_version", "2.1.0");
         String methodUrlCompletion = textOr(in, "method_url_completion", "UNAVAILABLE");
         String paymentMethodId     = text(in, "payment_method_id");
@@ -269,7 +271,7 @@ public class GpApi3dsServlet extends HttpServlet {
                .put("challenge_return_url",       env("CHALLENGE_NOTIFICATION_URL", ""))
                .put("three_ds_method_return_url", env("METHOD_NOTIFICATION_URL",    ""));
 
-        JsonNode raw = gpPost("/authentications", payload);
+        JsonNode raw = gpPost("/authentications/" + URLEncoder.encode(authenticationId, StandardCharsets.UTF_8) + "/initiate", payload);
         JsonNode tds = raw.path("three_ds");
 
         ObjectNode data = MAPPER.createObjectNode();
@@ -292,14 +294,14 @@ public class GpApi3dsServlet extends HttpServlet {
 
     private void handleGetAuthResult(JsonNode in, HttpServletResponse res) throws Exception {
         String serverTransIdRaw = text(in, "server_trans_id");
-        String serverTransId    = serverTransIdRaw != null ? serverTransIdRaw.replaceFirst("^AUT_", "") : "";
+        String serverTransId    = serverTransIdRaw != null ? serverTransIdRaw.trim() : "";
         if (serverTransId.isEmpty()) {
             res.setStatus(400);
             res.getWriter().write("{\"success\":false,\"error\":\"server_trans_id is required\"}");
             return;
         }
 
-        JsonNode raw = gpGet("/authentications/" + serverTransId);
+        JsonNode raw = gpGet("/authentications/" + URLEncoder.encode(serverTransId, StandardCharsets.UTF_8) + "/result");
         JsonNode tds = raw.path("three_ds");
 
         ObjectNode data = MAPPER.createObjectNode();
