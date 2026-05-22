@@ -238,16 +238,31 @@ check_docker_env() {
 }
 
 run_docker_smoke() {
-  compose up -d nodejs php dotnet java
-  log "Waiting for Docker services"
-  for backend in node php dotnet java; do
-    wait_for_backend "$backend"
-  done
+  local status=0
 
-  ./test-all-cards.sh 3001 node
-  ./test-all-cards.sh 8003 php
-  ./test-all-cards.sh 8006 dotnet
-  ./test-all-cards.sh 8004 java
+  compose up --build -d nodejs php dotnet java
+
+  {
+    log "Waiting for Docker services"
+    for backend in node php dotnet java; do
+      wait_for_backend "$backend"
+    done
+
+    ./test-all-cards.sh 3001 node
+    ./test-all-cards.sh 8003 php
+    ./test-all-cards.sh 8006 dotnet
+    ./test-all-cards.sh 8004 java
+  } || status=$?
+
+  if [ "$status" -ne 0 ]; then
+    log "Docker service status"
+    compose ps || true
+    log "Recent Docker logs"
+    compose logs --no-color --tail=80 nodejs php dotnet java || true
+  fi
+
+  compose down
+  return "$status"
 }
 
 run_docker() {
