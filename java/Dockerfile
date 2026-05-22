@@ -11,4 +11,4 @@ COPY src ./src
 
 EXPOSE 8080
 
-CMD ["mvn", "cargo:run", "-DskipTests", "-Dquiet"]
+CMD ["mvn", "cargo:run", "-DskipTests", "-Dquiet", "-Dgpapi.cargo.port=8080"]

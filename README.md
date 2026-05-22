@@ -14,18 +14,24 @@ cp php/.env.example php/.env
 cp dotnet/.env.example dotnet/.env
 cp java/.env.example java/.env
 
-docker compose up --build
+./run.sh docker up
 ```
 
 | Service   | URL                    |
 |-----------|------------------------|
 | Frontend  | http://localhost:8000  |
-| Node.js   | http://localhost:8001  |
+| Node.js   | http://localhost:3001  |
 | PHP       | http://localhost:8003  |
 | Java      | http://localhost:8004  |
 | .NET      | http://localhost:8006  |
 
 Open the frontend, pick a backend from the dropdown, and run through the 3DS2 flow.
+
+Run the Docker smoke suite with:
+
+```bash
+./run.sh docker smoke
+```
 
 ---
 

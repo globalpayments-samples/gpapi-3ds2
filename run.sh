@@ -16,18 +16,21 @@ Usage:
   ./run.sh dev <backend>         Start frontend + backend for browser testing
   ./run.sh smoke <backend|all>   Run real GP-API CLI smoke tests
   ./run.sh setup <backend|all>   Install/restore backend dependencies
+  ./run.sh docker <command>      Manage Docker Compose services
 
 Backends:
   node     http://localhost:3001
   php      http://localhost:8003
-  dotnet   http://localhost:8080
-  java     http://localhost:8080
+  dotnet   http://localhost:8006
+  java     http://localhost:8004
 
 Examples:
   ./run.sh dev node
   ./run.sh smoke node
   ./run.sh smoke all
   ./run.sh check
+  ./run.sh docker up
+  ./run.sh docker smoke
 USAGE
 }
 
@@ -39,7 +42,8 @@ backend_port() {
   case "${1:-}" in
     node) printf '3001' ;;
     php) printf '8003' ;;
-    dotnet|java) printf '8080' ;;
+    dotnet) printf '8006' ;;
+    java) printf '8004' ;;
     *) printf 'Unknown backend: %s\n' "${1:-}" >&2; exit 2 ;;
   esac
 }
@@ -62,11 +66,11 @@ start_backend() {
       (cd php && php -S 0.0.0.0:8003 router.php) >/tmp/gpapi-3ds-php.log 2>&1 &
       ;;
     dotnet)
-      log "Starting .NET backend on http://localhost:8080"
-      (cd dotnet && PORT=8080 dotnet run --no-build) >/tmp/gpapi-3ds-dotnet.log 2>&1 &
+      log "Starting .NET backend on http://localhost:8006"
+      (cd dotnet && GP_SAMPLE_PORT=8006 dotnet run --no-build) >/tmp/gpapi-3ds-dotnet.log 2>&1 &
       ;;
     java)
-      log "Starting Java backend on http://localhost:8080"
+      log "Starting Java backend on http://localhost:8004"
       (cd java && JAVA_HOME="${JAVA_HOME:-$JAVA_HOME_DEFAULT}" mvn -q -DskipTests cargo:run) >/tmp/gpapi-3ds-java.log 2>&1 &
       ;;
     *)
@@ -210,6 +214,83 @@ run_smoke() {
   esac
 }
 
+compose() {
+  if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
+    docker compose "$@"
+  elif command -v docker-compose >/dev/null 2>&1; then
+    docker-compose "$@"
+  else
+    printf 'Docker Compose not found. Install Docker Desktop or docker compose.\n' >&2
+    exit 1
+  fi
+}
+
+check_docker_env() {
+  local missing=0
+  local file
+  for file in nodejs/.env php/.env dotnet/.env java/.env; do
+    if [ ! -f "$file" ]; then
+      printf 'Missing %s. Copy %s.example and add credentials.\n' "$file" "$file" >&2
+      missing=1
+    fi
+  done
+  [ "$missing" -eq 0 ]
+}
+
+run_docker_smoke() {
+  compose up -d nodejs php dotnet java
+  log "Waiting for Docker services"
+  for backend in node php dotnet java; do
+    wait_for_backend "$backend"
+  done
+
+  ./test-all-cards.sh 3001 node
+  ./test-all-cards.sh 8003 php
+  ./test-all-cards.sh 8006 dotnet
+  ./test-all-cards.sh 8004 java
+}
+
+run_docker() {
+  local action="${1:-help}"
+  case "$action" in
+    build)
+      check_docker_env
+      compose build
+      ;;
+    up|start)
+      check_docker_env
+      compose up --build -d frontend nodejs php dotnet java
+      compose ps
+      printf '\nFrontend: http://localhost:8000\n'
+      ;;
+    down|stop)
+      compose down
+      ;;
+    logs)
+      shift || true
+      compose logs -f "$@"
+      ;;
+    ps|status)
+      compose ps
+      ;;
+    smoke)
+      check_docker_env
+      run_docker_smoke
+      ;;
+    *)
+      cat <<'USAGE'
+Docker commands:
+  ./run.sh docker build
+  ./run.sh docker up
+  ./run.sh docker smoke
+  ./run.sh docker logs [service]
+  ./run.sh docker ps
+  ./run.sh docker down
+USAGE
+      ;;
+  esac
+}
+
 cmd="${1:-help}"
 case "$cmd" in
   help|-h|--help) usage ;;
@@ -217,6 +298,7 @@ case "$cmd" in
   setup) run_setup "${2:-all}" ;;
   dev) run_dev "${2:-node}" ;;
   smoke) run_smoke "${2:-node}" ;;
+  docker) shift; run_docker "$@" ;;
   *)
     usage >&2
     exit 2

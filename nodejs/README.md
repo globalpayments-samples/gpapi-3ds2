@@ -2,7 +2,7 @@
 
 Express server written as ES modules, using Node 18's built-in `fetch`. GP-API calls go out as plain HTTP requests, while the browser uses Hosted Fields for single-use tokenization.
 
-Runs on port **3001** (Docker host port **8001**).
+Runs on port **3001**.
 
 ---
 

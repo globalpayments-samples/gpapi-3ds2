@@ -433,6 +433,6 @@ app.MapPost("/api/authorize-payment", async (HttpRequest req) =>
     });
 });
 
-var port = Environment.GetEnvironmentVariable("PORT") ?? "8080";
+var port = Environment.GetEnvironmentVariable("GP_SAMPLE_PORT") ?? Environment.GetEnvironmentVariable("PORT") ?? "8080";
 app.Urls.Add($"http://0.0.0.0:{port}");
 app.Run();

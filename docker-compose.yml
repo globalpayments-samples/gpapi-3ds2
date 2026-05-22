@@ -18,7 +18,7 @@ services:
       context: ./nodejs
       dockerfile: Dockerfile
     ports:
-      - "8001:3001"
+      - "3001:3001"
     env_file:
       - ./nodejs/.env
     environment:
@@ -59,6 +59,7 @@ services:
       - ./dotnet/.env
     environment:
       - ASPNETCORE_URLS=http://+:8080
+      - GP_SAMPLE_PORT=8080
     networks:
       - gp3ds
     healthcheck:

@@ -2,7 +2,7 @@
 
 Jakarta EE servlet deployed to Tomcat via the Maven Cargo plugin. Uses Java's built-in `HttpClient` for direct GP-API calls, while the browser uses Hosted Fields for single-use tokenization.
 
-Runs on port **8080** (Docker host port **8004**). Requires **Java 21**.
+Runs on port **8004** with the root helper script. The Docker container listens on `8080` internally and maps to host port `8004`. Requires **Java 21**.
 
 ---
 
@@ -27,7 +27,7 @@ export JAVA_HOME=/usr/lib/jvm/java-21-openjdk
 mvn clean package cargo:run
 ```
 
-Server starts at `http://localhost:8080`.
+Server starts at `http://localhost:8004`.
 
 ---
 

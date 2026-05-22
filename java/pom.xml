@@ -13,6 +13,7 @@
         <maven.compiler.source>21</maven.compiler.source>
         <maven.compiler.target>21</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <gpapi.cargo.port>8004</gpapi.cargo.port>
     </properties>
 
     <dependencies>
@@ -67,7 +68,7 @@
                     <configuration>
                         <properties>
                             <cargo.servlet.host>0.0.0.0</cargo.servlet.host>
-                            <cargo.servlet.port>8080</cargo.servlet.port>
+                            <cargo.servlet.port>${gpapi.cargo.port}</cargo.servlet.port>
                             <cargo.servlet.uriEncoding>UTF-8</cargo.servlet.uriEncoding>
                             <cargo.context>/</cargo.context>
                         </properties>

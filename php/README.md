@@ -2,7 +2,7 @@
 
 PHP 8.3+ server using the built-in CLI server (`php -S`). Dependencies managed by Composer — `vlucas/phpdotenv` only. GP-API calls are direct HTTP/cURL, while the browser uses Hosted Fields for single-use tokenization.
 
-Runs on port **8080** internally (Docker host port **8003**).
+Runs on port **8003** with the root helper script. The Docker container listens on `8080` internally and maps to host port `8003`.
 
 ---
 
@@ -32,7 +32,7 @@ cp .env.example .env
 # fill in GP_APP_ID, GP_APP_KEY, GP_MERCHANT_ID, GP_ACCOUNT_NAME, GP_ACCOUNT_ID
 
 composer install
-php -S localhost:8080 router.php
+php -S localhost:8003 router.php
 ```
 
 ---
