@@ -4,7 +4,7 @@ WORKDIR /app
 
 # Install cURL extension
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends unzip libcurl4-openssl-dev && \
+    apt-get install -y --no-install-recommends unzip wget libcurl4-openssl-dev && \
     docker-php-ext-install curl && \
     rm -rf /var/lib/apt/lists/*
 

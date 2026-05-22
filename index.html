@@ -207,6 +207,29 @@
             margin-bottom: 16px;
             font-size: 13px;
         }
+        .main-layout {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+            gap: 24px;
+            align-items: start;
+        }
+        @media (max-width: 900px) {
+            .main-layout {
+                grid-template-columns: minmax(0, 1fr);
+            }
+        }
+        @media (max-width: 520px) {
+            #hosted-card-fields .gp-form-row,
+            #hosted-card-fields .gp-form-row:has(#hosted-card-expiration) {
+                grid-template-columns: minmax(0, 1fr);
+            }
+            #hosted-card-fields .gp-form-group[style] {
+                max-width: none !important;
+            }
+            .mode-switch label {
+                min-width: 0;
+            }
+        }
         .hidden { display: none !important; }
     </style>
     <script src="https://js.globalpay.com/4.1.12/globalpayments.js"></script>
@@ -251,7 +274,7 @@
             </div>
         </div>
 
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px; align-items: start;">
+        <div class="main-layout">
 
             <!-- LEFT COLUMN: Form -->
             <div>
