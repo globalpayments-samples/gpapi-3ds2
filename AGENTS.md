@@ -84,7 +84,7 @@ Use each language's `.env.example` as the source of truth. Node falls back to `3
 | `4012001036273338` | Unavailable / not-enrolled Visa |
 | `12/2026`, `CVV 123` | Shared expiry and CVV for all sandbox cards |
 
-Get sandbox app and merchant credentials from https://developer.globalpay.com/.
+Get sandbox app and merchant credentials from https://developer.globalpayments.com/.
 
 ## API Request Shape
 
@@ -109,7 +109,7 @@ This is demo code. Every backend enables permissive CORS, returns raw GP-API pay
 
 ```bash
 # Recommended: all services together
-cd /Users/shane.logsdon/Code/temp/gpapi-3ds2
+cd /path/to/gpapi-3ds2
 cp nodejs/.env.example nodejs/.env
 cp php/.env.example php/.env
 cp java/.env.example java/.env
