@@ -1,67 +1,68 @@
 # Node.js Backend
 
-Express server written as ES modules, using Node 18's built-in `fetch`. GP-API calls go out as plain HTTP requests, while the browser uses Hosted Fields for single-use tokenization.
+Express backend for the shared 3DS2 sample. Server-side Global Payments calls use `globalpayments-api`; the browser uses Hosted Fields for card entry.
 
-Runs on port **3001**.
+Default port: `3001`.
 
----
-
-## Files
-
-```
-auth.js      Token generation and caching (OAuth2 Bearer)
-server.js    Express routes for all 5 API endpoints
-package.json express + dotenv only
-Dockerfile
-.env.example
-```
-
----
-
-## Setup
+## Run
 
 ```bash
 cp .env.example .env
-# fill in GP_APP_ID, GP_APP_KEY, GP_MERCHANT_ID, GP_ACCOUNT_NAME, GP_ACCOUNT_ID
-
 npm install
 node server.js
 ```
 
-Server starts at `http://localhost:3001`.
+Or from the repo root:
 
----
-
-## Environment Variables
-
+```bash
+./run.sh dev node
+./run.sh smoke node
 ```
+
+## Environment
+
+```bash
 GP_APP_ID=
 GP_APP_KEY=
-GP_MERCHANT_ID=
+GP_API_ENVIRONMENT=sandbox
+
 GP_ACCOUNT_NAME=transaction_processing
 GP_ACCOUNT_ID=
-GP_API_ENVIRONMENT=sandbox
 GP_TOKENIZATION_ACCOUNT_NAME=
+
+GP_PARTNER_MERCHANT_ID=
+
+METHOD_NOTIFICATION_URL=
+CHALLENGE_NOTIFICATION_URL=
+FRONTEND_ORIGIN=http://localhost:8000
+
 PORT=3001
 ```
 
----
+`CHALLENGE_NOTIFICATION_URL` must be HTTPS for 3DS auth calls. For browser challenge testing, expose this backend over HTTPS and point the notification URLs at `/3ds-method-notification` and `/3ds-challenge-notification`.
 
-## Endpoints
+## Routes
 
-```
+```text
 GET  /api/health
 GET  /api/tokenization-config
 POST /api/check-enrollment
 POST /api/initiate-auth
 POST /api/get-auth-result
 POST /api/authorize-payment
+
+GET/POST /3ds-method-notification
+GET/POST /3ds-challenge-notification
 ```
 
----
+## Files
 
-## Notes
+```text
+gp-sdk.js      SDK setup and mapping helpers
+server.js      Express routes
+package.json   Dependencies and start script
+Dockerfile
+.env.example
+```
 
-- Token logic is in `auth.js`: ISO-8601 nonce, `SHA512(nonce + appKey)` with no separator, no `merchant_id` in the token request body.
-- Tokens are cached in memory and refreshed when under 60 seconds to expiry.
-- `npm ci` will fail if there's no lockfile — use `npm install` instead.
+`gp-sdk.js` is the main place to look for SDK configuration.

@@ -3,7 +3,8 @@
     "description": "GP-API 3DS2 sandbox tester — PHP backend",
     "require": {
         "php": ">=8.1",
-        "vlucas/phpdotenv": "^5.5"
+        "vlucas/phpdotenv": "^5.5",
+        "globalpayments/php-sdk": "^13.3"
     },
     "autoload": {
         "psr-4": {

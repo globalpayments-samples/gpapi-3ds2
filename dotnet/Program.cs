@@ -1,438 +1,389 @@
 /**
  * GP-API 3DS2 Backend — .NET Minimal API
  *
- * Uses HttpClient directly (no GP SDK) to call GP-API UCP endpoints.
- * Token is cached in memory with expiry tracking.
+ * Server-side Global Payments calls are made through the official .NET SDK.
  */
 
-using System.Net.Http.Headers;
-using System.Security.Cryptography;
-using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using dotenv.net;
+using GlobalPayments.Api;
+using GlobalPayments.Api.Entities;
+using GlobalPayments.Api.PaymentMethods;
+using GlobalPayments.Api.Services;
+using GPEnvironment = GlobalPayments.Api.Entities.Environment;
 
 DotEnv.Load();
 
 var builder = WebApplication.CreateBuilder(args);
-var app     = builder.Build();
-var jsonOptions = new JsonSerializerOptions { DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull };
+var app = builder.Build();
+var configured = false;
+const string ConfigName = "gpapi-3ds-sample";
+const string GpVersion = "2021-03-22";
 
-// CORS — allow frontend on any origin in dev
+var jsonOptions = new JsonSerializerOptions {
+    DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+    ReferenceHandler = ReferenceHandler.IgnoreCycles
+};
+
 app.Use(async (ctx, next) =>
 {
-    ctx.Response.Headers["Access-Control-Allow-Origin"]  = "*";
+    ctx.Response.Headers["Access-Control-Allow-Origin"] = "*";
     ctx.Response.Headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS";
     ctx.Response.Headers["Access-Control-Allow-Headers"] = "Content-Type";
-    if (ctx.Request.Method == "OPTIONS") { ctx.Response.StatusCode = 204; return; }
+    if (ctx.Request.Method == "OPTIONS") {
+        ctx.Response.StatusCode = 204;
+        return;
+    }
     await next();
 });
 
-// ─── Token cache ─────────────────────────────────────────────────────────────
+app.MapGet("/api/health", () => Results.Ok(new {
+    status = "ok",
+    backend = "dotnet",
+    version = "1.0.0",
+    sdk = "GlobalPayments.Api"
+}));
 
-string? cachedToken     = null;
-long    tokenExpiresAt  = 0; // Unix ms
-
-async Task<JsonElement> GenerateAccessTokenAsync(HttpClient http, Dictionary<string, object>? extra = null)
+app.MapMethods("/3ds-method-notification", new[] { "GET", "POST" }, async (HttpRequest req) =>
 {
-    var appId  = Environment.GetEnvironmentVariable("GP_APP_ID")  ?? throw new Exception("GP_APP_ID not set");
-    var appKey = Environment.GetEnvironmentVariable("GP_APP_KEY") ?? throw new Exception("GP_APP_KEY not set");
+    var data = await NotificationValue(req, "threeDSMethodData");
+    return Results.Content(NotificationPage("handleMethodNotification", data), "text/html");
+});
 
-    var nonce  = DateTime.UtcNow.ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'");
-    var secret = Convert.ToHexString(SHA512.HashData(Encoding.UTF8.GetBytes($"{nonce}{appKey}"))).ToLower();
-
-    var tokenRequest = new Dictionary<string, object>
-    {
-        ["app_id"] = appId,
-        ["nonce"] = nonce,
-        ["secret"] = secret,
-        ["grant_type"] = "client_credentials",
-    };
-    if (extra != null)
-        foreach (var item in extra) tokenRequest[item.Key] = item.Value;
-
-    var body = JsonSerializer.Serialize(tokenRequest);
-    var req  = new HttpRequestMessage(HttpMethod.Post, "/ucp/accesstoken")
-    {
-        Content = new StringContent(body, Encoding.UTF8, "application/json")
-    };
-    req.Headers.Add("X-GP-Version", "2021-03-22");
-
-    var resp = await http.SendAsync(req);
-    var json = await resp.Content.ReadAsStringAsync();
-    var doc  = JsonDocument.Parse(json).RootElement;
-
-    if (!resp.IsSuccessStatusCode)
-        throw new Exception($"Token generation failed ({resp.StatusCode}): {json}");
-
-    return doc.Clone();
-}
-
-async Task<string> GetAccessTokenAsync(HttpClient http)
+app.MapMethods("/3ds-challenge-notification", new[] { "GET", "POST" }, async (HttpRequest req) =>
 {
-    if (cachedToken != null && DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() < tokenExpiresAt)
-        return cachedToken;
+    var data = await NotificationValue(req, "cres", "CRes");
+    return Results.Content(NotificationPage("handleChallengeNotification", data), "text/html");
+});
 
-    var doc = await GenerateAccessTokenAsync(http);
-    cachedToken    = doc.GetProperty("token").GetString();
-    var expiresIn  = doc.GetProperty("seconds_to_expire").GetInt32();
-    tokenExpiresAt = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds() + (expiresIn - 60) * 1000L;
-    return cachedToken!;
-}
-
-// ─── GP-API request helper ────────────────────────────────────────────────────
-
-using var httpClient = new HttpClient(new HttpClientHandler { AutomaticDecompression = System.Net.DecompressionMethods.All })
-    { BaseAddress = new Uri("https://apis.sandbox.globalpay.com") };
-
-async Task<(JsonElement root, bool ok, int status)> GpRequest(string method, string path, object? body = null)
+app.MapGet("/api/tokenization-config", () =>
 {
-    var token = await GetAccessTokenAsync(httpClient);
-    var req   = new HttpRequestMessage(new HttpMethod(method), path);
-    req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", token);
-    req.Headers.Add("X-GP-Version", "2021-03-22");
-
-    if (body != null)
-        req.Content = new StringContent(JsonSerializer.Serialize(body, jsonOptions), Encoding.UTF8, "application/json");
-
-    var resp = await httpClient.SendAsync(req);
-    var json = await resp.Content.ReadAsStringAsync();
-    var root = JsonDocument.Parse(json.Length > 0 ? json : "{}").RootElement;
-    return (root, resp.IsSuccessStatusCode, (int)resp.StatusCode);
-}
-
-static string ToMinorUnits(string amount) =>
-    ((int)Math.Round(double.Parse(amount) * 100)).ToString();
-
-static string TwoDigitYear(string year) =>
-    year.Length > 2 ? year[^2..] : year;
-
-IResult GpError(JsonElement root, int status)
-{
-    var msg = root.TryGetProperty("error", out var e) && e.TryGetProperty("message", out var m)
-        ? m.GetString() : $"GP-API error {status}";
-    return Results.Json(new
-    {
-        success         = false,
-        error           = msg,
-        gp_error_code   = root.TryGetProperty("error", out var e2) && e2.TryGetProperty("code",   out var cod) ? cod.GetString() : null,
-        gp_error_detail = root.TryGetProperty("error", out var e3) && e3.TryGetProperty("detail", out var det) ? det.GetString() : null,
-        raw             = root
-    }, statusCode: status);
-}
-
-// ─── Routes ──────────────────────────────────────────────────────────────────
-
-app.MapGet("/api/health", () => Results.Ok(new { status = "ok", backend = "dotnet", version = "1.0.0" }));
-
-app.MapGet("/api/tokenization-config", async () =>
-{
-    try
-    {
-        var token = await GenerateAccessTokenAsync(httpClient, new Dictionary<string, object>
-        {
-            ["permissions"] = new[] { "PMT_POST_Create_Single" },
-            ["restricted_token"] = "YES",
-            ["interval_to_expire"] = "10_MINUTES",
-        });
-        string? tokenizationAccount = null;
-        var tokenizationAccountOverride = Environment.GetEnvironmentVariable("GP_TOKENIZATION_ACCOUNT_NAME");
-        if (token.TryGetProperty("scope", out var scope) &&
-            scope.TryGetProperty("accounts", out var accounts) &&
-            accounts.ValueKind == JsonValueKind.Array &&
-            accounts.GetArrayLength() > 0 &&
-            accounts[0].TryGetProperty("name", out var accountNameFromScope))
-            tokenizationAccount = accountNameFromScope.GetString();
-
-        return Results.Ok(new
-        {
+    try {
+        var token = GpApiService.GenerateTransactionKey(SdkConfig(tokenization: true));
+        return Results.Ok(new {
             success = true,
-            data = new
-            {
-                env = Environment.GetEnvironmentVariable("GP_API_ENVIRONMENT") ?? "sandbox",
-                accessToken = token.GetProperty("token").GetString(),
-                accountName = !string.IsNullOrWhiteSpace(tokenizationAccountOverride)
-                    ? tokenizationAccountOverride
-                    : tokenizationAccount
-                    ?? Environment.GetEnvironmentVariable("GP_ACCOUNT_NAME")
-                    ?? "transaction_processing",
-                merchantId = Environment.GetEnvironmentVariable("GP_MERCHANT_ID"),
-                apiVersion = "2021-03-22"
+            data = new {
+                env = Env("GP_API_ENVIRONMENT", "sandbox"),
+                accessToken = token.Token,
+                accountName = Env("GP_TOKENIZATION_ACCOUNT_NAME", token.TokenizationAccountName ?? Env("GP_ACCOUNT_NAME", "transaction_processing")),
+                merchantId = (string?)null,
+                apiVersion = GpVersion
             }
         });
-    }
-    catch (Exception e)
-    {
-        return Results.Json(new { success = false, error = e.Message }, statusCode: 500);
+    } catch (Exception ex) {
+        return SdkError(ex);
     }
 });
 
 app.MapPost("/api/check-enrollment", async (HttpRequest req) =>
 {
-    var root        = (await JsonDocument.ParseAsync(req.Body)).RootElement;
-    string Get(string k, string def = "") => root.TryGetProperty(k, out var v) ? v.GetString() ?? def : def;
-    var cardNumber  = Get("card_number");
-    var expMonth    = Get("exp_month");
-    var expYear     = Get("exp_year");
-    var paymentMethodId = Get("payment_method_id");
-    var accountName  = Environment.GetEnvironmentVariable("GP_ACCOUNT_NAME") ?? "transaction_processing";
-    var challengeUrl = Environment.GetEnvironmentVariable("CHALLENGE_NOTIFICATION_URL");
-    var methodUrl    = Environment.GetEnvironmentVariable("METHOD_NOTIFICATION_URL");
-
-    var accountId   = Environment.GetEnvironmentVariable("GP_ACCOUNT_ID");
-    var merchantId  = Environment.GetEnvironmentVariable("GP_MERCHANT_ID");
-
-    object paymentMethod = !string.IsNullOrEmpty(paymentMethodId)
-        ? new { id = paymentMethodId }
-        : new
-        {
-            entry_mode = "ECOM",
-            card = new { number = cardNumber, expiry_month = expMonth, expiry_year = TwoDigitYear(expYear) }
-        };
-
-    var payload = new
-    {
-        account_name = accountName, account_id = accountId, merchant_id = merchantId,
-        channel = "CNP", country = "GB",
-        amount = "1000", currency = "GBP", reference = Guid.NewGuid().ToString(),
-        payment_method = paymentMethod,
-        three_ds = new { source = "BROWSER", preference = "NO_PREFERENCE", message_version = "2.2.0" },
-        notifications = new { challenge_return_url = challengeUrl, three_ds_method_return_url = methodUrl }
-    };
-
-    var (r, ok, status) = await GpRequest("POST", "/ucp/authentications", payload);
-    if (!ok) return GpError(r, status);
-
-    string? mUrl = null, mData = null;
-    if (r.TryGetProperty("three_ds", out var tds) &&
-        tds.TryGetProperty("method_url", out var mu) &&
-        mu.ValueKind != JsonValueKind.Null)
-    {
-        mUrl  = mu.GetString();
-        var mJson = JsonSerializer.Serialize(new { threeDSServerTransID = r.GetProperty("id").GetString(), methodNotificationURL = methodUrl });
-        mData = Convert.ToBase64String(Encoding.UTF8.GetBytes(mJson));
+    try {
+        EnsureConfigured();
+        var input = await JsonDocument.ParseAsync(req.Body);
+        var secure = Secure3dService.CheckEnrollment(PaymentMethod(input.RootElement))
+            .WithAmount(AmountDecimal(input.RootElement))
+            .WithCurrency(Currency(input.RootElement))
+            .Execute(ConfigName);
+        return Results.Json(new { success = true, data = MapEnrollment(secure), raw = secure }, jsonOptions);
+    } catch (Exception ex) {
+        return SdkError(ex);
     }
-
-    var tds2 = r.TryGetProperty("three_ds", out var t2) ? t2 : default;
-    string? Tds2(string k) => tds2.ValueKind != JsonValueKind.Undefined && tds2.TryGetProperty(k, out var v) ? v.GetString() : null;
-
-    return Results.Ok(new
-    {
-        success = true,
-        data = new
-        {
-            server_trans_id  = r.GetProperty("id").GetString(),
-            server_trans_ref = Tds2("server_trans_ref"),
-            enrolled         = Tds2("enrolled_status"),
-            message_version  = Tds2("message_version"),
-            method_url       = mUrl,
-            method_data      = mData
-        },
-        raw = r
-    });
 });
 
 app.MapPost("/api/initiate-auth", async (HttpRequest req) =>
 {
-    var root = (await JsonDocument.ParseAsync(req.Body)).RootElement;
-
-    string Get(string k, string def = "") => root.TryGetProperty(k, out var v) ? v.GetString() ?? def : def;
-    var serverTransIdRaw    = Get("server_trans_id");
-    var authenticationId    = serverTransIdRaw.Trim();
-    var serverTransId       = authenticationId.StartsWith("AUT_") ? authenticationId[4..] : authenticationId;
-    var messageVersion      = Get("message_version", "2.1.0");
-    var methodUrlCompletion = Get("method_url_completion", "UNAVAILABLE");
-    var paymentMethodId     = Get("payment_method_id");
-    var cardNumber          = Get("card_number");
-    var expMonth            = Get("exp_month");
-    var expYear             = Get("exp_year");
-    var cardholderName      = Get("cardholder_name", "Test User");
-    var order               = root.TryGetProperty("order", out var o) ? o : default;
-    var amount              = order.ValueKind != JsonValueKind.Undefined && order.TryGetProperty("amount",   out var a) ? a.GetString()! : "10.00";
-    var currency            = order.ValueKind != JsonValueKind.Undefined && order.TryGetProperty("currency", out var c) ? c.GetString()! : "GBP";
-    var bd                  = root.TryGetProperty("browser_data", out var bde) ? bde : default;
-
-    string Bd(string k, string def) => bd.ValueKind != JsonValueKind.Undefined && bd.TryGetProperty(k, out var v) ? v.ToString() : def;
-
-    var accountName  = Environment.GetEnvironmentVariable("GP_ACCOUNT_NAME") ?? "transaction_processing";
-    var accountId2   = Environment.GetEnvironmentVariable("GP_ACCOUNT_ID");
-    var merchantId2  = Environment.GetEnvironmentVariable("GP_MERCHANT_ID");
-    var challengeUrl = Environment.GetEnvironmentVariable("CHALLENGE_NOTIFICATION_URL");
-    var methodUrl2   = Environment.GetEnvironmentVariable("METHOD_NOTIFICATION_URL");
-
-    object paymentMethod = !string.IsNullOrEmpty(paymentMethodId)
-        ? new { id = paymentMethodId, name = cardholderName, entry_mode = "ECOM" }
-        : new
-        {
-            entry_mode = "ECOM",
-            card = new { number = cardNumber, expiry_month = expMonth, expiry_year = TwoDigitYear(expYear), full_name = cardholderName }
-        };
-
-    var payload = new
-    {
-        account_name = accountName, account_id = accountId2, merchant_id = merchantId2,
-        channel = "CNP", country = "GB",
-        amount = ToMinorUnits(amount), currency, reference = Guid.NewGuid().ToString(),
-        payment_method = paymentMethod,
-        three_ds = new
-        {
-            source = "BROWSER", preference = "NO_PREFERENCE", message_version = messageVersion,
-            server_trans_ref = serverTransId, method_url_completion = methodUrlCompletion
-        },
-        order = new
-        {
-            amount = ToMinorUnits(amount), currency, reference = Guid.NewGuid().ToString(),
-            address_indicator = false, date_time_created = DateTime.UtcNow.ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'")
-        },
-        payer = new
-        {
-            email = "test@example.com",
-            billing_address = new { line1 = "1 Test Street", city = "London", postal_code = "SW1A 1AA", country = "826" }
-        },
-        browser_data = new
-        {
-            accept_header         = Bd("accept_header",        "text/html,application/xhtml+xml"),
-            color_depth           = Bd("color_depth",          "24"),
-            ip                    = Bd("ip",                   "123.123.123.123"),
-            java_enabled          = Bd("java_enabled",         "false"),
-            javascript_enabled    = Bd("javascript_enabled",   "true"),
-            language              = Bd("language",             "en-GB"),
-            screen_height         = Bd("screen_height",        "1080"),
-            screen_width          = Bd("screen_width",         "1920"),
-            challenge_window_size = Bd("challenge_window_size","FULL_SCREEN"),
-            timezone              = Bd("timezone",             "0"),
-            user_agent            = Bd("user_agent",           "Mozilla/5.0")
-        },
-        notifications = new { challenge_return_url = challengeUrl, three_ds_method_return_url = methodUrl2 }
-    };
-
-    var (r, ok, status) = await GpRequest("POST", $"/ucp/authentications/{Uri.EscapeDataString(authenticationId)}/initiate", payload);
-    if (!ok) return GpError(r, status);
-
-    var tds = r.TryGetProperty("three_ds", out var t) ? t : default;
-    string? Tds(string k) => tds.ValueKind != JsonValueKind.Undefined && tds.TryGetProperty(k, out var v) ? v.GetString() : null;
-
-    return Results.Ok(new
-    {
-        success = true,
-        data = new
-        {
-            server_trans_id      = r.GetProperty("id").GetString(),
-            status               = r.TryGetProperty("status", out var s) ? s.GetString() : null,
-            acs_reference_number = Tds("acs_reference_number"),
-            acs_trans_id         = Tds("acs_trans_id"),
-            acs_signed_content   = Tds("acs_signed_content"),
-            acs_challenge_url    = Tds("acs_challenge_url") ?? Tds("challenge_value"),
-            eci                  = Tds("eci"),
-            authentication_value = Tds("authentication_value"),
-            ds_trans_ref         = Tds("ds_trans_ref"),
-            message_version      = Tds("message_version"),
-            server_trans_ref     = Tds("server_trans_ref") ?? r.GetProperty("id").GetString()
-        },
-        raw = r
-    });
+    try {
+        EnsureConfigured();
+        var input = (await JsonDocument.ParseAsync(req.Body)).RootElement;
+        var seed = new ThreeDSecure { ServerTransactionId = Get(input, "server_trans_id") };
+        var secure = Secure3dService.InitiateAuthentication(PaymentMethod(input), seed)
+            .WithAmount(AmountDecimal(input))
+            .WithCurrency(Currency(input))
+            .WithOrderCreateDate(DateTime.Now)
+            .WithAddress(ShippingAddress(), AddressType.Shipping)
+            .WithAuthenticationSource(AuthenticationSource.BROWSER)
+            .WithBrowserData(BrowserDataFrom(input.TryGetProperty("browser_data", out var bd) ? bd : default))
+            .WithMethodUrlCompletion(MethodCompletion(Get(input, "method_url_completion", "UNAVAILABLE")))
+            .Execute(ConfigName);
+        return Results.Json(new { success = true, data = MapAuthentication(secure), raw = secure }, jsonOptions);
+    } catch (Exception ex) {
+        return SdkError(ex);
+    }
 });
 
 app.MapPost("/api/get-auth-result", async (HttpRequest req) =>
 {
-    var root          = (await JsonDocument.ParseAsync(req.Body)).RootElement;
-    var serverTransIdRaw = root.GetProperty("server_trans_id").GetString();
-    var serverTransId    = serverTransIdRaw?.Trim();
-
-    if (string.IsNullOrEmpty(serverTransId))
-        return Results.BadRequest(new { success = false, error = "server_trans_id is required" });
-
-    var (r, ok, status) = await GpRequest("GET", $"/ucp/authentications/{Uri.EscapeDataString(serverTransId)}/result");
-    if (!ok) return GpError(r, status);
-
-    var tds = r.TryGetProperty("three_ds", out var t) ? t : default;
-    string? Tds(string k) => tds.ValueKind != JsonValueKind.Undefined && tds.TryGetProperty(k, out var v) ? v.GetString() : null;
-
-    return Results.Ok(new
-    {
-        success = true,
-        data = new
-        {
-            status               = r.TryGetProperty("status", out var s) ? s.GetString() : null,
-            eci                  = Tds("eci"),
-            authentication_value = Tds("authentication_value"),
-            ds_trans_ref         = Tds("ds_trans_ref"),
-            message_version      = Tds("message_version"),
-            server_trans_ref     = Tds("server_trans_ref") ?? r.GetProperty("id").GetString()
-        },
-        raw = r
-    });
+    try {
+        EnsureConfigured();
+        var input = (await JsonDocument.ParseAsync(req.Body)).RootElement;
+        var serverTransId = Get(input, "server_trans_id").Trim();
+        if (string.IsNullOrWhiteSpace(serverTransId)) {
+            return Results.BadRequest(new { success = false, error = "server_trans_id is required" });
+        }
+        var secure = Secure3dService.GetAuthenticationData()
+            .WithServerTransactionId(serverTransId)
+            .WithAmount(AmountDecimal(input))
+            .Execute(ConfigName);
+        return Results.Json(new { success = true, data = MapAuthentication(secure), raw = secure }, jsonOptions);
+    } catch (Exception ex) {
+        return SdkError(ex);
+    }
 });
 
 app.MapPost("/api/authorize-payment", async (HttpRequest req) =>
 {
-    var root = (await JsonDocument.ParseAsync(req.Body)).RootElement;
+    try {
+        EnsureConfigured();
+        var input = (await JsonDocument.ParseAsync(req.Body)).RootElement;
+        var authenticationId = Get(input, "authentication_id",
+            input.TryGetProperty("three_ds", out var tds)
+                ? Get(tds, "authentication_id", Get(tds, "server_trans_ref"))
+                : "");
 
-    string Get(string k, string def = "") => root.TryGetProperty(k, out var v) ? v.GetString() ?? def : def;
-    var cardNumber = Get("card_number");
-    var expMonth   = Get("exp_month");
-    var expYear    = Get("exp_year");
-    var cvn        = Get("cvn");
-    var amount     = Get("amount", "10.00");
-    var currency   = Get("currency", "GBP");
-    var paymentMethodId = Get("payment_method_id");
-    var cardholderName = Get("cardholder_name", "Test User");
-    var tds3       = root.TryGetProperty("three_ds", out var t3) ? t3 : default;
-    string? Td(string k) => tds3.ValueKind != JsonValueKind.Undefined && tds3.TryGetProperty(k, out var v) ? v.GetString() : null;
-
-    var accountName = Environment.GetEnvironmentVariable("GP_ACCOUNT_NAME") ?? "transaction_processing";
-    var accountId = Environment.GetEnvironmentVariable("GP_ACCOUNT_ID");
-    var merchantId = Environment.GetEnvironmentVariable("GP_MERCHANT_ID");
-
-    object paymentMethod = !string.IsNullOrEmpty(paymentMethodId)
-        ? new
-        {
-            id = paymentMethodId,
-            name = cardholderName,
-            entry_mode = "ECOM",
-            authentication = new { id = Get("authentication_id", Td("authentication_id") ?? Td("server_trans_ref") ?? "") }
+        ThreeDSecure? secure = null;
+        if (!string.IsNullOrWhiteSpace(authenticationId)) {
+            secure = Secure3dService.GetAuthenticationData()
+                .WithServerTransactionId(authenticationId)
+                .WithAmount(AmountDecimal(input))
+                .Execute(ConfigName);
         }
-        : new
-        {
-            entry_mode = "ECOM",
-            card = new { number = cardNumber, expiry_month = expMonth, expiry_year = TwoDigitYear(expYear), cvv = cvn }
-        };
 
-    var payload = new
-    {
-        account_name = accountName, account_id = accountId, merchant_id = merchantId,
-        channel = "CNP", type = "SALE",
-        amount = ToMinorUnits(amount), currency, reference = Guid.NewGuid().ToString(), country = "GB",
-        payment_method = paymentMethod,
-        three_ds = !string.IsNullOrEmpty(paymentMethodId) ? null : new
-        {
-            source               = "BROWSER",
-            authentication_value = Td("authentication_value"),
-            server_trans_ref     = Td("server_trans_ref"),
-            ds_trans_ref         = Td("ds_trans_ref"),
-            eci                  = Td("eci"),
-            message_version      = Td("message_version") ?? "2.2.0"
+        var card = PaymentMethod(input);
+        if (secure != null) {
+            card.ThreeDSecure = secure;
+        }
+
+        var transaction = card.Charge(AmountDecimal(input))
+            .WithCurrency(Currency(input))
+            .Execute(ConfigName);
+        return Results.Json(new { success = true, data = MapTransaction(transaction), raw = transaction }, jsonOptions);
+    } catch (Exception ex) {
+        return SdkError(ex);
+    }
+});
+
+GpApiConfig SdkConfig(bool tokenization = false)
+{
+    var config = new GpApiConfig {
+        AppId = Required("GP_APP_ID"),
+        AppKey = Required("GP_APP_KEY"),
+        Environment = string.Equals(Env("GP_API_ENVIRONMENT", "sandbox"), "production", StringComparison.OrdinalIgnoreCase)
+            ? GPEnvironment.PRODUCTION
+            : GPEnvironment.TEST,
+        Country = Env("GP_COUNTRY", "GB"),
+        Channel = Channel.CardNotPresent,
+        MerchantId = Env("GP_PARTNER_MERCHANT_ID", null),
+        MethodNotificationUrl = Env("METHOD_NOTIFICATION_URL", null),
+        ChallengeNotificationUrl = Env("CHALLENGE_NOTIFICATION_URL", null),
+        MerchantContactUrl = Env("GP_MERCHANT_CONTACT_URL", "https://developer.globalpay.com/"),
+        AccessTokenInfo = new AccessTokenInfo {
+            TransactionProcessingAccountName = Env("GP_ACCOUNT_NAME", "transaction_processing"),
+            TransactionProcessingAccountID = Env("GP_ACCOUNT_ID", null),
+            TokenizationAccountName = Env("GP_TOKENIZATION_ACCOUNT_NAME", null),
         }
     };
 
-    var (r, ok, status) = await GpRequest("POST", "/ucp/transactions", payload);
-    if (!ok) return GpError(r, status);
+    if (tokenization) {
+        config.Permissions = new[] { "PMT_POST_Create_Single" };
+        config.IntervalToExpire = IntervalToExpire.TEN_MINUTES;
+    }
 
-    return Results.Ok(new
-    {
-        success = true,
-        data = new
-        {
-            transaction_id = r.GetProperty("id").GetString(),
-            status         = r.TryGetProperty("status",   out var s)  ? s.GetString()  : null,
-            result_code    = r.TryGetProperty("action",   out var ac) && ac.TryGetProperty("result_code", out var rc) ? rc.GetString() : null,
-            amount         = r.TryGetProperty("amount",   out var am) ? am.GetString()  : null,
-            currency       = r.TryGetProperty("currency", out var cu) ? cu.GetString()  : null
-        },
-        raw = r
-    });
-});
+    return config;
+}
 
-var port = Environment.GetEnvironmentVariable("GP_SAMPLE_PORT") ?? Environment.GetEnvironmentVariable("PORT") ?? "8080";
+void EnsureConfigured()
+{
+    if (configured) {
+        return;
+    }
+    ServicesContainer.ConfigureService(SdkConfig(), ConfigName);
+    configured = true;
+}
+
+CreditCardData PaymentMethod(JsonElement input)
+{
+    var card = new CreditCardData();
+    var token = Get(input, "payment_method_id");
+    if (!string.IsNullOrWhiteSpace(token)) {
+        card.Token = token;
+    } else {
+        card.Number = Get(input, "card_number");
+        card.ExpMonth = IntValue(Get(input, "exp_month"));
+        card.ExpYear = IntValue(Get(input, "exp_year"));
+        card.Cvn = Get(input, "cvn");
+    }
+    card.CardHolderName = Get(input, "cardholder_name", "Test User");
+    return card;
+}
+
+BrowserData BrowserDataFrom(JsonElement input)
+{
+    return new BrowserData {
+        AcceptHeader = Get(input, "accept_header", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"),
+        ColorDepth = ColorDepthFrom(Get(input, "color_depth", "24")),
+        IpAddress = Get(input, "ip", "127.0.0.1"),
+        JavaEnabled = Bool(input, "java_enabled", false),
+        JavaScriptEnabled = Bool(input, "javascript_enabled", true),
+        Language = Get(input, "language", "en-GB"),
+        ScreenHeight = Int(input, "screen_height", 1080),
+        ScreenWidth = Int(input, "screen_width", 1920),
+        ChallengeWindowSize = ChallengeWindow(Get(input, "challenge_window_size", "FULL_SCREEN")),
+        Timezone = Get(input, "timezone", "0"),
+        UserAgent = Get(input, "user_agent", "Mozilla/5.0")
+    };
+}
+
+Address ShippingAddress() => new() {
+    StreetAddress1 = "1 Test Street",
+    City = "London",
+    PostalCode = "SW1A 1AA",
+    CountryCode = "826"
+};
+
+object MapEnrollment(ThreeDSecure secure) => new {
+    server_trans_id = secure.ServerTransactionId,
+    server_trans_ref = secure.ProviderServerTransRef ?? secure.ServerTransactionId,
+    enrolled = secure.Enrolled,
+    message_version = secure.MessageVersion ?? secure.Version?.ToString(),
+    method_url = secure.IssuerAcsUrl,
+    method_data = secure.PayerAuthenticationRequest,
+};
+
+object MapAuthentication(ThreeDSecure secure)
+{
+    var status = secure.Status ?? secure.Enrolled;
+    return new {
+        server_trans_id = secure.ServerTransactionId,
+        status,
+        acs_reference_number = secure.AcsReferenceNumber,
+        acs_trans_id = secure.AcsTransactionId,
+        acs_challenge_url = secure.IssuerAcsUrl,
+        eci = secure.Eci,
+        authentication_value = secure.AuthenticationValue,
+        ds_trans_ref = secure.DirectoryServerTransactionId,
+        message_version = secure.MessageVersion,
+        server_trans_ref = secure.ProviderServerTransRef ?? secure.ServerTransactionId,
+        challenge = status == "CHALLENGE_REQUIRED" ? new {
+            requestUrl = secure.IssuerAcsUrl,
+            encodedChallengeRequest = secure.PayerAuthenticationRequest,
+            messageType = secure.MessageType ?? "creq"
+        } : null
+    };
+}
+
+object MapTransaction(Transaction transaction) => new {
+    transaction_id = transaction.TransactionId,
+    status = transaction.ResponseMessage,
+    result_code = transaction.ResponseCode,
+    amount = transaction.BalanceAmount,
+    currency = (string?)null
+};
+
+string Amount(JsonElement input) =>
+    input.TryGetProperty("order", out var order) && order.TryGetProperty("amount", out var amount)
+        ? amount.ToString()
+        : Get(input, "amount", "10.00");
+
+decimal AmountDecimal(JsonElement input) =>
+    decimal.TryParse(Amount(input), out var parsed) ? parsed : 10.00m;
+
+string Currency(JsonElement input) =>
+    input.TryGetProperty("order", out var order) && order.TryGetProperty("currency", out var currency)
+        ? currency.ToString()
+        : Get(input, "currency", "GBP");
+
+string Get(JsonElement input, string key, string fallback = "")
+{
+    if (input.ValueKind == JsonValueKind.Undefined || input.ValueKind == JsonValueKind.Null) {
+        return fallback;
+    }
+    return input.TryGetProperty(key, out var value) && value.ValueKind != JsonValueKind.Null
+        ? value.ToString()
+        : fallback;
+}
+
+bool Bool(JsonElement input, string key, bool fallback) =>
+    bool.TryParse(Get(input, key, fallback ? "true" : "false"), out var parsed) ? parsed : fallback;
+
+int Int(JsonElement input, string key, int fallback) =>
+    int.TryParse(Get(input, key, fallback.ToString()), out var parsed) ? parsed : fallback;
+
+int IntValue(string value) =>
+    int.TryParse(value, out var parsed) ? parsed : 0;
+
+ColorDepth ColorDepthFrom(string value)
+{
+    var numeric = int.TryParse(value, out var parsed) ? parsed : 24;
+    return numeric switch {
+        >= 48 => ColorDepth.FORTY_EIGHT_BITS,
+        >= 32 => ColorDepth.THIRTY_TWO_BITS,
+        >= 24 => ColorDepth.TWENTY_FOUR_BITS,
+        >= 16 => ColorDepth.SIXTEEN_BITS,
+        >= 15 => ColorDepth.FIFTEEN_BITS,
+        >= 8 => ColorDepth.EIGHT_BITS,
+        >= 4 => ColorDepth.FOUR_BITS,
+        >= 2 => ColorDepth.TWO_BITS,
+        _ => ColorDepth.ONE_BIT
+    };
+}
+
+ChallengeWindowSize ChallengeWindow(string value) =>
+    Enum.TryParse<ChallengeWindowSize>(value, out var parsed) ? parsed : ChallengeWindowSize.FULL_SCREEN;
+
+MethodUrlCompletion MethodCompletion(string value) =>
+    Enum.TryParse<MethodUrlCompletion>(value, out var parsed) ? parsed : MethodUrlCompletion.UNAVAILABLE;
+
+IResult SdkError(Exception ex) => Results.Json(new {
+    success = false,
+    error = ex.Message,
+    raw = new { type = ex.GetType().FullName }
+}, statusCode: 500);
+
+string Env(string name, string? fallback) =>
+    System.Environment.GetEnvironmentVariable(name) is { Length: > 0 } value ? value : fallback ?? "";
+
+string Required(string name) =>
+    Env(name, null) is { Length: > 0 } value ? value : throw new InvalidOperationException($"{name} must be set");
+
+async Task<string> NotificationValue(HttpRequest req, params string[] names)
+{
+    foreach (var name in names) {
+        if (req.Query.TryGetValue(name, out var queryValue)) {
+            return queryValue.ToString();
+        }
+    }
+    if (req.HasFormContentType) {
+        var form = await req.ReadFormAsync();
+        foreach (var name in names) {
+            if (form.TryGetValue(name, out var formValue)) {
+                return formValue.ToString();
+            }
+        }
+    }
+    return "";
+}
+
+string NotificationPage(string handler, string data)
+{
+    var origin = Env("FRONTEND_ORIGIN", "http://localhost:8000");
+    return $"""
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>3DS Notification</title>
+  <script src="https://cdn.jsdelivr.net/npm/globalpayments-3ds@1.8.7/dist/globalpayments-3ds.min.js"></script>
+</head>
+<body>
+<script>
+  window.GlobalPayments?.ThreeDSecure?.{handler}({JsonSerializer.Serialize(data)}, {JsonSerializer.Serialize(origin)});
+</script>
+</body>
+</html>
+""";
+}
+
+var port = System.Environment.GetEnvironmentVariable("GP_SAMPLE_PORT") ?? System.Environment.GetEnvironmentVariable("PORT") ?? "8080";
 app.Urls.Add($"http://0.0.0.0:{port}");
 app.Run();

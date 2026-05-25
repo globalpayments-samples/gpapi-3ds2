@@ -161,24 +161,65 @@
             border-radius: 8px;
             padding: 10px 12px;
             margin-bottom: 16px;
-            font-family: monospace;
             font-size: 13px;
         }
+        .selected-card-grid {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 8px;
+        }
+        .selected-card-item {
+            display: flex;
+            min-width: 0;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            border: 1px solid #dee2e6;
+            border-radius: 6px;
+            background: #fff;
+            padding: 8px 10px;
+        }
+        .selected-card-value {
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            font-family: monospace;
+        }
+        .copy-card-value {
+            flex: 0 0 auto;
+            border: 1px solid #ced4da;
+            border-radius: 5px;
+            background: #f8f9fa;
+            color: #343a40;
+            cursor: pointer;
+            font: inherit;
+            font-size: 12px;
+            padding: 3px 7px;
+        }
+        .copy-card-value:hover {
+            background: #e9f5fb;
+            border-color: #90caf9;
+        }
         .hosted-field {
-            min-height: 44px;
+            min-height: 56px;
             border: 1px solid #ced4da;
             border-radius: 6px;
             background: #fff;
-            padding: 0 8px;
+            padding: 0 12px;
             box-sizing: border-box;
             overflow: hidden;
             position: relative;
             width: 100%;
         }
+        .hosted-field:focus-within {
+            border-color: #0072ce;
+            box-shadow: 0 0 0 3px rgba(0, 114, 206, 0.12);
+        }
         .hosted-field iframe {
             border: 0 !important;
             display: block !important;
-            height: 42px !important;
+            height: 54px !important;
             max-width: 100% !important;
             min-width: 0 !important;
             width: 100% !important;
@@ -207,6 +248,9 @@
             margin-bottom: 16px;
             font-size: 13px;
         }
+        .diagnostic-only.hidden {
+            display: none !important;
+        }
         .main-layout {
             display: grid;
             grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
@@ -228,6 +272,9 @@
             }
             .mode-switch label {
                 min-width: 0;
+            }
+            .selected-card-grid {
+                grid-template-columns: minmax(0, 1fr);
             }
         }
         .hidden { display: none !important; }
@@ -389,7 +436,7 @@
                             </div>
                         </div>
                         </div>
-                        <div class="gp-form-group">
+                        <div id="diagnostic-cardholder" class="gp-form-group diagnostic-only hidden">
                             <label for="cardholder_name" class="gp-label">Cardholder Name</label>
                             <input type="text" id="cardholder_name" name="cardholder_name" class="gp-input"
                                 value="John Doe" required autocomplete="cc-name">
@@ -571,11 +618,55 @@ document.getElementById('backend-selector').addEventListener('change', checkHeal
 checkHealth();
 
 // ─── Test card fill ───────────────────────────────────────────────────────────
+async function copyText(value, label) {
+  try {
+    await navigator.clipboard.writeText(value);
+    const selected = document.getElementById('selected-card');
+    selected.dataset.copyStatus = `${label} copied`;
+  } catch {
+    const selected = document.getElementById('selected-card');
+    selected.dataset.copyStatus = `Select and copy ${label.toLowerCase()}`;
+  }
+  renderSelectedCard();
+}
+
+function renderSelectedCard() {
+  const selected = document.getElementById('selected-card');
+  const card = state.selectedCard;
+  if (!card) {
+    selected.style.display = 'none';
+    selected.innerHTML = '';
+    return;
+  }
+
+  const status = selected.dataset.copyStatus || 'Card selected';
+  selected.style.display = 'block';
+  selected.innerHTML = `
+    <div style="margin-bottom: 8px; color: #495057;">${card.name} · ${status}</div>
+    <div class="selected-card-grid">
+      ${selectedCardItem('Number', card.num)}
+      ${selectedCardItem('Expiry', `${card.month}/${card.year}`)}
+      ${selectedCardItem('CVV', card.cvn)}
+      ${selectedCardItem('Name', card.name)}
+    </div>`;
+}
+
+function selectedCardItem(label, value) {
+  return `
+    <div class="selected-card-item">
+      <span class="selected-card-value" title="${value}">${value}</span>
+      <button type="button" class="copy-card-value" onclick="copyText('${value}', '${label}')">Copy</button>
+    </div>`;
+}
+
 function fillCard(num, month, year, name) {
   state.selectedCard = { num, month, year, name, cvn: '123' };
   const selected = document.getElementById('selected-card');
-  selected.style.display = 'block';
-  selected.textContent = `${name}: ${num}  exp ${month}/${year}  cvv 123`;
+  selected.dataset.copyStatus = state.integrationMode === 'hosted' ? 'Card number copied' : 'Diagnostic fields filled';
+  renderSelectedCard();
+  if (state.integrationMode === 'hosted') {
+    copyText(num, 'Card number');
+  }
   document.getElementById('card_number').value  = num;
   document.getElementById('exp_month').value    = month;
   document.getElementById('exp_year').value     = year;
@@ -588,6 +679,7 @@ function setIntegrationMode(mode) {
   document.getElementById('hosted-card-fields').classList.toggle('hidden', mode !== 'hosted');
   document.getElementById('hosted-submit').classList.toggle('hidden', mode !== 'hosted');
   document.getElementById('diagnostic-card-fields').classList.toggle('hidden', mode !== 'diagnostic');
+  document.getElementById('diagnostic-cardholder').classList.toggle('hidden', mode !== 'diagnostic');
   document.getElementById('submit-btn').classList.toggle('hidden', mode !== 'diagnostic');
 }
 
@@ -703,9 +795,47 @@ async function initHostedFields() {
           'font-family': 'DM Sans, Arial, sans-serif',
           'font-size': '15px',
           color: '#212529',
+          border: '0',
+          'box-shadow': 'none',
+          outline: 'none',
+          background: 'transparent',
+          margin: '0',
+          padding: '0',
+          width: '100%',
+          height: '54px',
+          'line-height': '54px',
+        },
+        'input[type=text]': {
+          border: '0',
+          'box-shadow': 'none',
+          outline: 'none',
+          background: 'transparent',
+          margin: '0',
+          padding: '0',
+          width: '100%',
+          height: '54px',
+          'line-height': '54px',
+        },
+        'input[type=tel]': {
+          border: '0',
+          'box-shadow': 'none',
+          outline: 'none',
+          background: 'transparent',
+          margin: '0',
+          padding: '0',
+          width: '100%',
+          height: '54px',
+          'line-height': '54px',
         },
         '#secure-payment-field': {
-          padding: '12px 0',
+          border: '0',
+          'box-shadow': 'none',
+          outline: 'none',
+          background: 'transparent',
+          margin: '0',
+          padding: '0',
+          width: '100%',
+          height: '54px',
         },
         '#secure-payment-field[type=button]': {
           'background-color': '#0072ce',
@@ -735,6 +865,10 @@ async function initHostedFields() {
 
     state.hostedForm.on('token-success', async (resp) => {
       const paymentMethodId = tokenPaymentReference(resp);
+      const tokenCardholderName = resp?.details?.cardholderName || resp?.details?.cardholder_name || resp?.cardholderName;
+      if (tokenCardholderName) {
+        document.getElementById('cardholder_name').value = tokenCardholderName;
+      }
       resetFlow();
       setLoading(true);
       showResult(1, `<strong>Tokenized:</strong> ${paymentMethodId || 'token received'}`, 'ok');
@@ -826,12 +960,13 @@ async function runApiFlow({ payment_method_id = null, token_raw = null }) {
 
     state.serverTransId  = r1.data.server_trans_id;
     state.messageVersion = r1.data.message_version;
+    const enrolledOk = ['Y', 'ENROLLED'].includes(r1.data.enrolled);
     showResult(1, `
       <dl>
         <dt>Enrolled</dt><dd>${r1.data.enrolled}</dd>
         <dt>Server Trans ID</dt><dd>${r1.data.server_trans_id}</dd>
         <dt>Method URL</dt><dd>${r1.data.method_url || 'N/A'}</dd>
-      </dl>`, r1.data.enrolled === 'Y' ? 'ok' : 'warn');
+      </dl>`, enrolledOk ? 'ok' : 'warn');
     showRaw(1, r1.raw);
     setStep(1, 'done');
 
@@ -898,23 +1033,38 @@ async function runApiFlow({ payment_method_id = null, token_raw = null }) {
     // ── Step 4: Challenge (if required) ───────────────────────────────────
     if (r3.data.status === 'CHALLENGE_REQUIRED') {
       setStep(4, 'active');
-      if (!r3.data.acs_challenge_url) {
+      const challenge = r3.data.challenge || {};
+      if (!challenge.requestUrl && !r3.data.acs_challenge_url) {
         showResult(4, 'Challenge required but no ACS challenge URL returned.', 'err');
         setStep(4, 'error');
         setLoading(false);
         return;
       }
-      showResult(4, 'ACS challenge launched. Complete it in the popup, then the flow continues.', 'warn');
-      openAcsModal(r3.data.acs_challenge_url);
 
-      // Poll for challenge completion (wait for user to close modal)
-      await new Promise(resolve => {
-        const btn = document.querySelector('#acs-modal .raw-toggle');
-        const original = btn.onclick;
-        btn.onclick = () => { original(); resolve(); };
-      });
+      if (threeDs?.handleInitiateAuthentication && challenge.requestUrl) {
+        showResult(4, 'ACS challenge launched. Complete it in the challenge window, then the flow continues.', 'warn');
+        const challengeResult = await threeDs.handleInitiateAuthentication(r3.data, {
+          windowSize: threeDs.ChallengeWindowSize?.Windowed600x400,
+          displayMode: 'lightbox',
+        });
+        state.authData = challengeResult;
+        const challengeData = challengeResult.challenge?.response?.data || {};
+        if (challengeData.threeDSServerTransID) {
+          state.authData.server_trans_id = challengeData.threeDSServerTransID;
+        }
+        showRaw(4, challengeResult);
+        showResult(4, `Challenge completed with status ${challengeData.transStatus || 'received'}.`, 'ok');
+      } else {
+        showResult(4, 'ACS challenge launched. Complete it in the popup, then close the popup to continue.', 'warn');
+        openAcsModal(r3.data.acs_challenge_url);
+        await new Promise(resolve => {
+          const btn = document.querySelector('#acs-modal .raw-toggle');
+          const original = btn.onclick;
+          btn.onclick = () => { original(); resolve(); };
+        });
+        showResult(4, 'Challenge window closed.', 'ok');
+      }
       setStep(4, 'done');
-      showResult(4, 'Challenge window closed.', 'ok');
     } else {
       setStep(4, 'done');
       showResult(4, r3.data.status === 'SUCCESS_AUTHENTICATED'

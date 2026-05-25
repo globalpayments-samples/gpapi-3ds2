@@ -23,6 +23,7 @@ services:
       - ./nodejs/.env
     environment:
       - PORT=3001
+      - FRONTEND_ORIGIN=http://localhost:8000
     networks:
       - gp3ds
     healthcheck:
@@ -40,6 +41,8 @@ services:
       - "8003:8080"
     env_file:
       - ./php/.env
+    environment:
+      - FRONTEND_ORIGIN=http://localhost:8000
     networks:
       - gp3ds
     healthcheck:
@@ -60,6 +63,7 @@ services:
     environment:
       - ASPNETCORE_URLS=http://+:8080
       - GP_SAMPLE_PORT=8080
+      - FRONTEND_ORIGIN=http://localhost:8000
     networks:
       - gp3ds
     healthcheck:
@@ -77,6 +81,8 @@ services:
       - "8004:8080"
     env_file:
       - ./java/.env
+    environment:
+      - FRONTEND_ORIGIN=http://localhost:8000
     networks:
       - gp3ds
     healthcheck:

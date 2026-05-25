@@ -48,6 +48,64 @@ backend_port() {
   esac
 }
 
+backend_env_file() {
+  case "${1:-}" in
+    node) printf 'nodejs/.env' ;;
+    php) printf 'php/.env' ;;
+    dotnet) printf 'dotnet/.env' ;;
+    java) printf 'java/.env' ;;
+    *) printf 'Unknown backend: %s\n' "${1:-}" >&2; exit 2 ;;
+  esac
+}
+
+env_value() {
+  local file="$1"
+  local key="$2"
+  awk -F= -v key="$key" '
+    $0 !~ /^[[:space:]]*#/ && $1 == key {
+      sub(/^[^=]*=/, "")
+      gsub(/^[[:space:]]+|[[:space:]]+$/, "")
+      gsub(/^"|"$/, "")
+      gsub(/^'\''|'\''$/, "")
+      print
+      exit
+    }
+  ' "$file"
+}
+
+validate_backend_env() {
+  local backend="$1"
+  local file
+  local missing=0
+  file="$(backend_env_file "$backend")"
+
+  if [ ! -f "$file" ]; then
+    printf 'Missing %s. Copy %s.example and add credentials.\n' "$file" "$file" >&2
+    return 1
+  fi
+
+  for key in GP_APP_ID GP_APP_KEY; do
+    if [ -z "$(env_value "$file" "$key")" ]; then
+      printf '%s is missing %s.\n' "$file" "$key" >&2
+      missing=1
+    fi
+  done
+
+  if [ -z "$(env_value "$file" GP_ACCOUNT_ID)" ] && [ -z "$(env_value "$file" GP_ACCOUNT_NAME)" ]; then
+    printf '%s must set GP_ACCOUNT_ID or GP_ACCOUNT_NAME.\n' "$file" >&2
+    missing=1
+  fi
+
+  local challenge_url
+  challenge_url="$(env_value "$file" CHALLENGE_NOTIFICATION_URL)"
+  if [[ ! "$challenge_url" =~ ^https:// ]]; then
+    printf '%s must set CHALLENGE_NOTIFICATION_URL to an HTTPS URL for 3DS auth smoke tests.\n' "$file" >&2
+    missing=1
+  fi
+
+  [ "$missing" -eq 0 ]
+}
+
 start_frontend() {
   log "Starting frontend on http://localhost:${FRONTEND_PORT}"
   python3 -m http.server "$FRONTEND_PORT" >/tmp/gpapi-3ds-frontend.log 2>&1 &
@@ -59,19 +117,19 @@ start_backend() {
   case "$backend" in
     node)
       log "Starting Node backend on http://localhost:3001"
-      (cd nodejs && PORT=3001 node server.js) >/tmp/gpapi-3ds-node.log 2>&1 &
+      (cd nodejs && PORT=3001 FRONTEND_ORIGIN="${FRONTEND_ORIGIN:-http://localhost:${FRONTEND_PORT}}" node server.js) >/tmp/gpapi-3ds-node.log 2>&1 &
       ;;
     php)
       log "Starting PHP backend on http://localhost:8003"
-      (cd php && php -S 0.0.0.0:8003 router.php) >/tmp/gpapi-3ds-php.log 2>&1 &
+      (cd php && FRONTEND_ORIGIN="${FRONTEND_ORIGIN:-http://localhost:${FRONTEND_PORT}}" php -S 0.0.0.0:8003 router.php) >/tmp/gpapi-3ds-php.log 2>&1 &
       ;;
     dotnet)
       log "Starting .NET backend on http://localhost:8006"
-      (cd dotnet && GP_SAMPLE_PORT=8006 dotnet run --no-build) >/tmp/gpapi-3ds-dotnet.log 2>&1 &
+      (cd dotnet && GP_SAMPLE_PORT=8006 FRONTEND_ORIGIN="${FRONTEND_ORIGIN:-http://localhost:${FRONTEND_PORT}}" dotnet run --no-build) >/tmp/gpapi-3ds-dotnet.log 2>&1 &
       ;;
     java)
       log "Starting Java backend on http://localhost:8004"
-      (cd java && JAVA_HOME="${JAVA_HOME:-$JAVA_HOME_DEFAULT}" mvn -q -DskipTests cargo:run) >/tmp/gpapi-3ds-java.log 2>&1 &
+      (cd java && FRONTEND_ORIGIN="${FRONTEND_ORIGIN:-http://localhost:${FRONTEND_PORT}}" JAVA_HOME="${JAVA_HOME:-$JAVA_HOME_DEFAULT}" mvn -q -DskipTests cargo:run) >/tmp/gpapi-3ds-java.log 2>&1 &
       ;;
     *)
       printf 'Unknown backend: %s\n' "$backend" >&2
@@ -119,7 +177,7 @@ wait_for_backend() {
 run_check() {
   log "Node syntax"
   node --check nodejs/server.js
-  node --check nodejs/auth.js
+  node --check nodejs/gp-sdk.js
 
   log "Frontend inline JavaScript syntax"
   node -e "const fs=require('fs'); const html=fs.readFileSync('index.html','utf8'); const scripts=[...html.matchAll(/<script>([\\s\\S]*?)<\\/script>/g)].map(m=>m[1]).join('\\n'); new Function(scripts); console.log('frontend inline JS syntax ok');"
@@ -185,6 +243,7 @@ run_smoke_one() {
   local backend="$1"
   local port
   port="$(backend_port "$backend")"
+  validate_backend_env "$backend"
 
   trap cleanup EXIT INT TERM
   BACKEND_PID=
@@ -228,9 +287,8 @@ compose() {
 check_docker_env() {
   local missing=0
   local file
-  for file in nodejs/.env php/.env dotnet/.env java/.env; do
-    if [ ! -f "$file" ]; then
-      printf 'Missing %s. Copy %s.example and add credentials.\n' "$file" "$file" >&2
+  for file in node php dotnet java; do
+    if ! validate_backend_env "$file"; then
       missing=1
     fi
   done
@@ -248,10 +306,11 @@ run_docker_smoke() {
       wait_for_backend "$backend"
     done
 
-    ./test-all-cards.sh 3001 node
-    ./test-all-cards.sh 8003 php
-    ./test-all-cards.sh 8006 dotnet
-    ./test-all-cards.sh 8004 java
+    for backend in node php dotnet java; do
+      if ! ./test-all-cards.sh "$(backend_port "$backend")" "$backend"; then
+        status=1
+      fi
+    done
   } || status=$?
 
   if [ "$status" -ne 0 ]; then

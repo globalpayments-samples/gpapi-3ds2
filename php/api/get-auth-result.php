@@ -16,19 +16,12 @@ if (!$serverTransId) {
 }
 
 try {
-    $raw = GpApiClient::request('GET', '/authentications/' . rawurlencode($serverTransId) . '/result');
+    $secure = GpApiClient::getAuthenticationData($serverTransId, (string)($input['amount'] ?? '10.00'));
 
     GpApiClient::jsonResponse([
         'success' => true,
-        'data' => [
-            'status'               => $raw['status']                            ?? null,
-            'eci'                  => $raw['three_ds']['eci']                   ?? null,
-            'authentication_value' => $raw['three_ds']['authentication_value']  ?? null,
-            'ds_trans_ref'         => $raw['three_ds']['ds_trans_ref']          ?? null,
-            'message_version'      => $raw['three_ds']['message_version']       ?? null,
-            'server_trans_ref'     => $raw['three_ds']['server_trans_ref']      ?? $raw['id'],
-        ],
-        'raw' => $raw,
+        'data' => GpApiClient::mapAuthentication($secure),
+        'raw' => $secure,
     ]);
 } catch (\Throwable $e) {
     GpApiClient::errorResponse($e);

@@ -1,68 +1,69 @@
 # .NET Backend
 
-ASP.NET Core minimal API targeting .NET 9. Uses `HttpClient` with automatic gzip decompression. Token is held in memory. GP-API calls are direct HTTP, while the browser uses Hosted Fields for single-use tokenization.
+ASP.NET Core minimal API for the shared 3DS2 sample. Server-side Global Payments calls use `GlobalPayments.Api`; the browser uses Hosted Fields for card entry.
 
-Runs on port **8006** with the root helper script. The default/internal container port is `8080`.
+Default local port: `8006`. The Docker container listens on `8080` and maps to `8006`.
 
----
-
-## Files
-
-```
-Program.cs       All routes and GP-API HTTP logic
-dotnet.csproj    DotEnv.Net only (no GP SDK)
-appsettings.json Standard ASP.NET config (logging, allowed hosts)
-Dockerfile
-.env.example
-```
-
----
-
-## Setup
+## Run
 
 ```bash
 cp .env.example .env
-# fill in GP_APP_ID, GP_APP_KEY, GP_MERCHANT_ID, GP_ACCOUNT_NAME, GP_ACCOUNT_ID
-
 dotnet restore
 GP_SAMPLE_PORT=8006 dotnet run
 ```
 
-Server starts at `http://localhost:8006`.
+Or from the repo root:
 
----
-
-## Environment Variables
-
+```bash
+./run.sh dev dotnet
+./run.sh smoke dotnet
 ```
+
+## Environment
+
+```bash
 GP_APP_ID=
 GP_APP_KEY=
-GP_MERCHANT_ID=
+GP_API_ENVIRONMENT=sandbox
+
 GP_ACCOUNT_NAME=transaction_processing
 GP_ACCOUNT_ID=
-GP_API_ENVIRONMENT=sandbox
 GP_TOKENIZATION_ACCOUNT_NAME=
+
+GP_PARTNER_MERCHANT_ID=
+
+METHOD_NOTIFICATION_URL=
+CHALLENGE_NOTIFICATION_URL=
+FRONTEND_ORIGIN=http://localhost:8000
+
 PORT=8080
 GP_SAMPLE_PORT=8006
 ```
 
----
+`CHALLENGE_NOTIFICATION_URL` must be HTTPS for 3DS auth calls. For browser challenge testing, expose this backend over HTTPS and point the notification URLs at `/3ds-method-notification` and `/3ds-challenge-notification`.
 
-## Endpoints
+## Routes
 
-```
+```text
 GET  /api/health
 GET  /api/tokenization-config
 POST /api/check-enrollment
 POST /api/initiate-auth
 POST /api/get-auth-result
 POST /api/authorize-payment
+
+GET/POST /3ds-method-notification
+GET/POST /3ds-challenge-notification
 ```
 
----
+## Files
 
-## Notes
+```text
+Program.cs       Routes, SDK setup, and mapping helpers
+dotnet.csproj    Dependencies
+appsettings.json ASP.NET config
+Dockerfile
+.env.example
+```
 
-- `HttpClient` is configured with `AutomaticDecompression = All` — GP-API returns gzip-encoded responses.
-- Token is cached in a static variable and regenerated when under 60 seconds to expiry.
-- `GP_SAMPLE_PORT` overrides `PORT` for local helper-script runs. Docker uses internal port `8080` and maps it to host port `8006`.
+`GP_SAMPLE_PORT` is used for local runs. Docker uses `PORT=8080`.

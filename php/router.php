@@ -29,6 +29,14 @@ $routes = [
 $path = strtok($uri, '?');
 $key  = $method . ' ' . $path;
 
+if ($path === '/3ds-method-notification') {
+    notification_page('handleMethodNotification', $_POST['threeDSMethodData'] ?? $_GET['threeDSMethodData'] ?? '');
+}
+
+if ($path === '/3ds-challenge-notification') {
+    notification_page('handleChallengeNotification', $_POST['cres'] ?? $_POST['CRes'] ?? $_GET['cres'] ?? $_GET['CRes'] ?? '');
+}
+
 if (isset($routes[$key])) {
     require $routes[$key];
     exit;
@@ -44,3 +52,15 @@ if (str_starts_with($path, '/api/')) {
 
 // Serve static files (index.html etc.) for non-API routes
 return false;
+
+function notification_page(string $handler, string $data): void
+{
+    $origin = getenv('FRONTEND_ORIGIN') ?: 'http://localhost:8000';
+    header('Content-Type: text/html; charset=utf-8');
+    echo '<!doctype html><html lang="en"><head><meta charset="utf-8"><title>3DS Notification</title>';
+    echo '<script src="https://cdn.jsdelivr.net/npm/globalpayments-3ds@1.8.7/dist/globalpayments-3ds.min.js"></script>';
+    echo '</head><body><script>';
+    echo 'window.GlobalPayments?.ThreeDSecure?.' . $handler . '(' . json_encode($data) . ', ' . json_encode($origin) . ');';
+    echo '</script></body></html>';
+    exit;
+}
