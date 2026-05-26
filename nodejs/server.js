@@ -6,6 +6,8 @@
  */
 
 import express from 'express';
+import rateLimit from 'express-rate-limit';
+import escapeHtml from 'escape-html';
 import crypto from 'node:crypto';
 import * as dotenv from 'dotenv';
 import {
@@ -30,6 +32,20 @@ const PORT = process.env.PORT || 3001;
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+const apiLimiter = rateLimit({
+  windowMs: 60_000,
+  limit: 120,
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+});
+
+const callbackLimiter = rateLimit({
+  windowMs: 60_000,
+  limit: 240,
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+});
+
 app.use((req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin', process.env.FRONTEND_ORIGIN || 'http://localhost:8000');
   res.setHeader('Vary', 'Origin');
@@ -38,6 +54,9 @@ app.use((req, res, next) => {
   if (req.method === 'OPTIONS') return res.sendStatus(204);
   next();
 });
+
+app.use('/api', apiLimiter);
+app.use(['/3ds-method-notification', '/3ds-challenge-notification'], callbackLimiter);
 
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', backend: 'nodejs', version: '1.0.0', sdk: 'globalpayments-api' });
@@ -152,8 +171,11 @@ function sendNotificationPage(res, handler, data) {
 }
 
 function notificationPage(handler, data, nonce) {
-  const targetOrigin = process.env.FRONTEND_ORIGIN || 'http://localhost:8000';
-  const payload = encodeNotificationPayload(data);
+  const notification = {
+    callback: notificationHandler(handler),
+    targetOrigin: process.env.FRONTEND_ORIGIN || 'http://localhost:8000',
+    payload: encodeNotificationPayload(data),
+  };
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -162,12 +184,30 @@ function notificationPage(handler, data, nonce) {
   <script src="https://cdn.jsdelivr.net/npm/globalpayments-3ds@1.8.7/dist/globalpayments-3ds.min.js"></script>
 </head>
 <body>
-<script nonce="${nonce}">
-  const notificationData = atob(${JSON.stringify(payload)});
-  window.GlobalPayments?.ThreeDSecure?.${handler}(notificationData, ${JSON.stringify(targetOrigin)});
+<script id="notification-data" type="application/json">${escapeHtml(JSON.stringify(notification))}</script>
+<script nonce="${htmlAttribute(nonce)}">
+  const notification = JSON.parse(document.getElementById('notification-data').textContent);
+  window.GlobalPayments?.ThreeDSecure?.[notification.callback](atob(notification.payload), notification.targetOrigin);
 </script>
 </body>
 </html>`;
+}
+
+function notificationHandler(handler) {
+  if (handler === 'handleMethodNotification' || handler === 'handleChallengeNotification') {
+    return handler;
+  }
+  throw new Error('Unsupported 3DS notification handler');
+}
+
+function htmlAttribute(value) {
+  return String(value).replace(/[&<>"']/g, (char) => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#x27;',
+  }[char]));
 }
 
 function encodeNotificationPayload(data) {
