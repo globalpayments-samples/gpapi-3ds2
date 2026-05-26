@@ -27,6 +27,7 @@ import jakarta.servlet.annotation.WebServlet;
 import jakarta.servlet.http.HttpServlet;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import org.owasp.encoder.Encode;
 
 import java.io.IOException;
 import java.math.BigDecimal;
@@ -136,14 +137,18 @@ public class GpApi3dsServlet extends HttpServlet {
     }
 
     private void writeNotificationPage(HttpServletResponse res, String handler, String data) throws IOException {
+        String safeHandler = switch (handler) {
+            case "handleMethodNotification", "handleChallengeNotification" -> handler;
+            default -> throw new IllegalArgumentException("Unsupported 3DS notification handler");
+        };
         String nonce = notificationNonce();
         res.setContentType("text/html");
         res.setHeader("Content-Security-Policy", "default-src 'none'; script-src 'nonce-" + nonce + "' https://cdn.jsdelivr.net; base-uri 'none'; frame-ancestors 'self'");
         res.setHeader("X-Content-Type-Options", "nosniff");
         res.setHeader("Referrer-Policy", "no-referrer");
         String origin = env("FRONTEND_ORIGIN", "http://localhost:8000");
-        String encodedData = MAPPER.writeValueAsString(encodeNotificationPayload(data));
-        String encodedOrigin = MAPPER.writeValueAsString(origin);
+        String encodedData = Encode.forJavaScriptBlock(encodeNotificationPayload(data));
+        String encodedOrigin = Encode.forJavaScriptBlock(origin);
         res.getWriter().write("""
             <!doctype html>
             <html lang="en">
@@ -154,9 +159,9 @@ public class GpApi3dsServlet extends HttpServlet {
             </head>
             <body>
             """);
-        res.getWriter().write("<script nonce=\"" + nonce + "\">");
-        res.getWriter().write("const notificationData = atob(" + encodedData + ");");
-        res.getWriter().write("window.GlobalPayments?.ThreeDSecure?." + handler + "(notificationData, " + encodedOrigin + ");");
+        res.getWriter().write("<script nonce=\"" + Encode.forHtmlAttribute(nonce) + "\">");
+        res.getWriter().write("const notificationData = atob(\"" + encodedData + "\");");
+        res.getWriter().write("window.GlobalPayments?.ThreeDSecure?." + safeHandler + "(notificationData, \"" + encodedOrigin + "\");");
         res.getWriter().write("""
             </script>
             </body>
