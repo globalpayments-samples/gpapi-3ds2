@@ -6,6 +6,7 @@
  */
 
 import express from 'express';
+import crypto from 'node:crypto';
 import * as dotenv from 'dotenv';
 import {
   GP_VERSION,
@@ -30,7 +31,8 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 app.use((req, res, next) => {
-  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Origin', process.env.FRONTEND_ORIGIN || 'http://localhost:8000');
+  res.setHeader('Vary', 'Origin');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   if (req.method === 'OPTIONS') return res.sendStatus(204);
@@ -42,11 +44,11 @@ app.get('/api/health', (_req, res) => {
 });
 
 app.all('/3ds-method-notification', (req, res) => {
-  res.type('html').send(notificationPage('handleMethodNotification', req.body?.threeDSMethodData || req.query?.threeDSMethodData || ''));
+  sendNotificationPage(res, 'handleMethodNotification', req.body?.threeDSMethodData || req.query?.threeDSMethodData || '');
 });
 
 app.all('/3ds-challenge-notification', (req, res) => {
-  res.type('html').send(notificationPage('handleChallengeNotification', req.body?.cres || req.body?.CRes || req.query?.cres || req.query?.CRes || ''));
+  sendNotificationPage(res, 'handleChallengeNotification', req.body?.cres || req.body?.CRes || req.query?.cres || req.query?.CRes || '');
 });
 
 app.get('/api/tokenization-config', async (_req, res) => {
@@ -141,8 +143,17 @@ function rawError(err) {
   };
 }
 
-function notificationPage(handler, data) {
+function sendNotificationPage(res, handler, data) {
+  const nonce = crypto.randomBytes(16).toString('base64');
+  res.setHeader('Content-Security-Policy', `default-src 'none'; script-src 'nonce-${nonce}' https://cdn.jsdelivr.net; base-uri 'none'; frame-ancestors 'self'`);
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Referrer-Policy', 'no-referrer');
+  res.type('html').send(notificationPage(handler, data, nonce));
+}
+
+function notificationPage(handler, data, nonce) {
   const targetOrigin = process.env.FRONTEND_ORIGIN || 'http://localhost:8000';
+  const payload = encodeNotificationPayload(data);
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -151,11 +162,20 @@ function notificationPage(handler, data) {
   <script src="https://cdn.jsdelivr.net/npm/globalpayments-3ds@1.8.7/dist/globalpayments-3ds.min.js"></script>
 </head>
 <body>
-<script>
-  window.GlobalPayments?.ThreeDSecure?.${handler}(${JSON.stringify(data)}, ${JSON.stringify(targetOrigin)});
+<script nonce="${nonce}">
+  const notificationData = atob(${JSON.stringify(payload)});
+  window.GlobalPayments?.ThreeDSecure?.${handler}(notificationData, ${JSON.stringify(targetOrigin)});
 </script>
 </body>
 </html>`;
+}
+
+function encodeNotificationPayload(data) {
+  const value = String(data || '');
+  if (value.length > 12000 || !/^[A-Za-z0-9+/=_-]*$/.test(value)) {
+    return '';
+  }
+  return Buffer.from(value, 'utf8').toString('base64');
 }
 
 app.listen(PORT, '0.0.0.0', () => {

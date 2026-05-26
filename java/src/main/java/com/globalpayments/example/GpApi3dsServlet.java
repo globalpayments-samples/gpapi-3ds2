@@ -30,7 +30,9 @@ import jakarta.servlet.http.HttpServletResponse;
 
 import java.io.IOException;
 import java.math.BigDecimal;
+import java.security.SecureRandom;
 import java.util.Arrays;
+import java.util.Base64;
 import java.util.stream.Collectors;
 
 @WebServlet(urlPatterns = {
@@ -48,6 +50,7 @@ public class GpApi3dsServlet extends HttpServlet {
     private static final String CONFIG_NAME = "gpapi-3ds-sample";
     private static final String GP_VERSION = "2021-03-22";
     private static final ObjectMapper MAPPER = new ObjectMapper();
+    private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
     private Dotenv dotenv;
     private boolean configured = false;
@@ -133,9 +136,13 @@ public class GpApi3dsServlet extends HttpServlet {
     }
 
     private void writeNotificationPage(HttpServletResponse res, String handler, String data) throws IOException {
+        String nonce = notificationNonce();
         res.setContentType("text/html");
+        res.setHeader("Content-Security-Policy", "default-src 'none'; script-src 'nonce-" + nonce + "' https://cdn.jsdelivr.net; base-uri 'none'; frame-ancestors 'self'");
+        res.setHeader("X-Content-Type-Options", "nosniff");
+        res.setHeader("Referrer-Policy", "no-referrer");
         String origin = env("FRONTEND_ORIGIN", "http://localhost:8000");
-        String encodedData = MAPPER.writeValueAsString(data == null ? "" : data);
+        String encodedData = MAPPER.writeValueAsString(encodeNotificationPayload(data));
         String encodedOrigin = MAPPER.writeValueAsString(origin);
         res.getWriter().write("""
             <!doctype html>
@@ -146,14 +153,29 @@ public class GpApi3dsServlet extends HttpServlet {
               <script src="https://cdn.jsdelivr.net/npm/globalpayments-3ds@1.8.7/dist/globalpayments-3ds.min.js"></script>
             </head>
             <body>
-            <script>
             """);
-        res.getWriter().write("window.GlobalPayments?.ThreeDSecure?." + handler + "(" + encodedData + ", " + encodedOrigin + ");");
+        res.getWriter().write("<script nonce=\"" + nonce + "\">");
+        res.getWriter().write("const notificationData = atob(" + encodedData + ");");
+        res.getWriter().write("window.GlobalPayments?.ThreeDSecure?." + handler + "(notificationData, " + encodedOrigin + ");");
         res.getWriter().write("""
             </script>
             </body>
             </html>
             """);
+    }
+
+    private String encodeNotificationPayload(String data) {
+        String value = data == null ? "" : data;
+        if (value.length() > 12000 || !value.matches("^[A-Za-z0-9+/=_-]*$")) {
+            return "";
+        }
+        return Base64.getEncoder().encodeToString(value.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+    }
+
+    private String notificationNonce() {
+        byte[] bytes = new byte[16];
+        SECURE_RANDOM.nextBytes(bytes);
+        return Base64.getEncoder().encodeToString(bytes);
     }
 
     private void handleCheckEnrollment(JsonNode input, HttpServletResponse res) throws Exception {
@@ -423,8 +445,9 @@ public class GpApi3dsServlet extends HttpServlet {
         writeJson(res, out);
     }
 
-    private static void addCors(HttpServletResponse res) {
-        res.setHeader("Access-Control-Allow-Origin", "*");
+    private void addCors(HttpServletResponse res) {
+        res.setHeader("Access-Control-Allow-Origin", env("FRONTEND_ORIGIN", "http://localhost:8000"));
+        res.setHeader("Vary", "Origin");
         res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
         res.setHeader("Access-Control-Allow-Headers", "Content-Type");
     }

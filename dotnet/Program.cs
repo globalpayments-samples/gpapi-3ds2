@@ -6,6 +6,7 @@
 
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Security.Cryptography;
 using dotenv.net;
 using GlobalPayments.Api;
 using GlobalPayments.Api.Entities;
@@ -28,7 +29,8 @@ var jsonOptions = new JsonSerializerOptions {
 
 app.Use(async (ctx, next) =>
 {
-    ctx.Response.Headers["Access-Control-Allow-Origin"] = "*";
+    ctx.Response.Headers["Access-Control-Allow-Origin"] = Env("FRONTEND_ORIGIN", "http://localhost:8000");
+    ctx.Response.Headers["Vary"] = "Origin";
     ctx.Response.Headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS";
     ctx.Response.Headers["Access-Control-Allow-Headers"] = "Content-Type";
     if (ctx.Request.Method == "OPTIONS") {
@@ -48,13 +50,13 @@ app.MapGet("/api/health", () => Results.Ok(new {
 app.MapMethods("/3ds-method-notification", new[] { "GET", "POST" }, async (HttpRequest req) =>
 {
     var data = await NotificationValue(req, "threeDSMethodData");
-    return Results.Content(NotificationPage("handleMethodNotification", data), "text/html");
+    return NotificationResult(req.HttpContext.Response, "handleMethodNotification", data);
 });
 
 app.MapMethods("/3ds-challenge-notification", new[] { "GET", "POST" }, async (HttpRequest req) =>
 {
     var data = await NotificationValue(req, "cres", "CRes");
-    return Results.Content(NotificationPage("handleChallengeNotification", data), "text/html");
+    return NotificationResult(req.HttpContext.Response, "handleChallengeNotification", data);
 });
 
 app.MapGet("/api/tokenization-config", () =>
@@ -364,9 +366,10 @@ async Task<string> NotificationValue(HttpRequest req, params string[] names)
     return "";
 }
 
-string NotificationPage(string handler, string data)
+string NotificationPage(string handler, string data, string nonce)
 {
     var origin = Env("FRONTEND_ORIGIN", "http://localhost:8000");
+    var payload = EncodeNotificationPayload(data);
     return $"""
 <!doctype html>
 <html lang="en">
@@ -376,12 +379,30 @@ string NotificationPage(string handler, string data)
   <script src="https://cdn.jsdelivr.net/npm/globalpayments-3ds@1.8.7/dist/globalpayments-3ds.min.js"></script>
 </head>
 <body>
-<script>
-  window.GlobalPayments?.ThreeDSecure?.{handler}({JsonSerializer.Serialize(data)}, {JsonSerializer.Serialize(origin)});
+<script nonce="{nonce}">
+  const notificationData = atob({JsonSerializer.Serialize(payload)});
+  window.GlobalPayments?.ThreeDSecure?.{handler}(notificationData, {JsonSerializer.Serialize(origin)});
 </script>
 </body>
 </html>
 """;
+}
+
+IResult NotificationResult(HttpResponse response, string handler, string data)
+{
+    var nonce = Convert.ToBase64String(RandomNumberGenerator.GetBytes(16));
+    response.Headers["Content-Security-Policy"] = $"default-src 'none'; script-src 'nonce-{nonce}' https://cdn.jsdelivr.net; base-uri 'none'; frame-ancestors 'self'";
+    response.Headers["X-Content-Type-Options"] = "nosniff";
+    response.Headers["Referrer-Policy"] = "no-referrer";
+    return Results.Content(NotificationPage(handler, data, nonce), "text/html; charset=utf-8");
+}
+
+string EncodeNotificationPayload(string data)
+{
+    if (data.Length > 12000 || !System.Text.RegularExpressions.Regex.IsMatch(data, "^[A-Za-z0-9+/=_-]*$")) {
+        return "";
+    }
+    return Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(data));
 }
 
 var port = System.Environment.GetEnvironmentVariable("GP_SAMPLE_PORT") ?? System.Environment.GetEnvironmentVariable("PORT") ?? "8080";

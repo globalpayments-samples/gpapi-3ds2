@@ -177,7 +177,8 @@ class GpApiClient
     {
         http_response_code($status);
         header('Content-Type: application/json');
-        header('Access-Control-Allow-Origin: *');
+        header('Access-Control-Allow-Origin: ' . (getenv('FRONTEND_ORIGIN') ?: 'http://localhost:8000'));
+        header('Vary: Origin');
         echo json_encode($data);
         exit;
     }
