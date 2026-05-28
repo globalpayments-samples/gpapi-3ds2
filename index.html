@@ -295,7 +295,7 @@
                 </div>
                 <nav class="gp-header-nav">
                     <a href="https://developer.globalpay.com/">Documentation</a>
-                    <a href="https://developer.globalpay.com/api">API Reference</a>
+                    <a href="https://developer.globalpayments.com/api/references-overview">API Reference</a>
                     <a href="https://developer.globalpay.com/sdks">SDKs</a>
                 </nav>
             </div>
@@ -329,7 +329,7 @@
                 <div class="gp-card" style="margin-bottom: 16px;">
                     <div class="gp-card-header">
                         <h2 class="gp-card-title">Test Cards</h2>
-                        <p class="gp-card-description">Click to select a sandbox card. Hosted Fields mode shows the value for manual entry; diagnostic mode fills the raw inputs.</p>
+                        <p class="gp-card-description">Click to select a sandbox card. Hosted Fields mode copies the card number and shows the rest for manual entry; diagnostic mode fills the raw inputs.</p>
                     </div>
                     <div class="test-cards-grid">
                         <button class="test-card-btn" onclick="fillCard('4263970000005262','12','2026','Frictionless Visa')">
@@ -568,13 +568,13 @@
             <div class="gp-footer-content">
                 <div class="gp-footer-section">
                     <p class="gp-footer-copyright">
-                        © 2024 Global Payments. All rights reserved.
+                        © 2024-<span id="footer-year">2026</span> Global Payments. All rights reserved.
                     </p>
                 </div>
                 <div class="gp-footer-section">
                     <nav class="gp-footer-nav">
                         <a href="https://developer.globalpay.com/" class="gp-footer-link">Developer Portal</a>
-                        <a href="https://developer.globalpay.com/api" class="gp-footer-link">API Reference</a>
+                        <a href="https://developer.globalpayments.com/api/references-overview" class="gp-footer-link">API Reference</a>
                     </nav>
                 </div>
             </div>
@@ -592,6 +592,8 @@ const state = {
   hostedReady:    false,
   integrationMode: 'hosted',
 };
+
+document.getElementById('footer-year').textContent = new Date().getFullYear();
 
 // ─── Backend URL ─────────────────────────────────────────────────────────────
 function backendUrl() {
