@@ -4,12 +4,11 @@
 # Example: ./test-all-cards.sh 8001 nodejs
 #
 # NOTE: CLI limitations —
-#   - Device fingerprint (method URL) cannot execute without a browser.
-#   - Therefore initiate-auth always returns status=AVAILABLE in headless mode.
-#   - Challenge completion and final ECI/auth-value require a browser session.
-#   - This script verifies API connectivity, token auth, enrollment, and that
-#     initiate-auth completes without error. Full frictionless/challenge outcome
-#     can only be confirmed in the browser UI.
+#   - Hosted Fields iframe entry requires a browser.
+#   - Device fingerprint (method URL) and ACS challenge completion require a browser.
+#   - This script verifies backend SDK connectivity, tokenization-token creation,
+#     enrollment, initiate-auth, result lookup, and sandbox authorization when the
+#     authentication reaches a final frictionless state.
 
 set -euo pipefail
 
@@ -40,6 +39,18 @@ post() {
   curl -s -X POST -H "Content-Type: application/json" -d "$2" "${BASE}${1}"
 }
 
+get() {
+  curl -s "${BASE}${1}"
+}
+
+is_true() {
+  [ "$1" = "True" ] || [ "$1" = "true" ]
+}
+
+is_final_auth() {
+  [ "$1" = "SUCCESS_AUTHENTICATED" ] || [ "$1" = "ATTEMPT_ACKNOWLEDGED" ]
+}
+
 # ── health check ─────────────────────────────────────────────────────────────
 
 echo ""
@@ -54,6 +65,16 @@ if [ "$(json_field "$HEALTH" "['status']")" = "ok" ]; then
   pass "Backend healthy"
 else
   fail "Backend unreachable — is the server running on port ${PORT}?"
+  exit 1
+fi
+echo ""
+
+echo "Checking Hosted Fields tokenization config..."
+TOKEN_CONFIG=$(get "/api/tokenization-config" || echo '{"success":false}')
+if is_true "$(json_field "$TOKEN_CONFIG" "['success']")"; then
+  pass "Hosted Fields tokenization token generated"
+else
+  fail "Tokenization config failed: $(json_field "$TOKEN_CONFIG" "['error']")"
   exit 1
 fi
 echo ""
@@ -83,7 +104,7 @@ run_card_test() {
   message_version=$(json_field "$r1" "['data']['message_version']")
   success1=$(json_field "$r1" "['success']")
 
-  if [ "$success1" != "True" ] && [ "$success1" != "true" ]; then
+  if ! is_true "$success1"; then
     fail "Enrollment check failed: $(json_field "$r1" "['error']")"
     echo ""
     return
@@ -140,15 +161,87 @@ run_card_test() {
   success3=$(json_field "$r3" "['success']")
   auth_status=$(json_field "$r3" "['data']['status']")
 
-  if [ "$success3" != "True" ] && [ "$success3" != "true" ]; then
+  if ! is_true "$success3"; then
     fail "Initiate auth failed: $(json_field "$r3" "['error']")"
     echo ""
     return
   fi
 
-  # AVAILABLE is the expected intermediate status in CLI (no browser fingerprint)
-  info "Initiate auth: status=${auth_status} (AVAILABLE expected in headless mode)"
+  info "Initiate auth: status=${auth_status}"
   pass "Initiate auth: no error"
+
+  if [ "$auth_status" = "CHALLENGE_REQUIRED" ]; then
+    pass "Challenge required — browser ACS completion required"
+    echo ""
+    return
+  fi
+
+  if [ "$auth_status" = "AVAILABLE" ]; then
+    warn "Authentication still AVAILABLE — browser method notification required before final result"
+    echo ""
+    return
+  fi
+
+  local r5 success5 result_status eci auth_value ds_trans_ref
+  r5=$(post "/api/get-auth-result" "{
+    \"server_trans_id\": \"${server_trans_id}\",
+    \"amount\": \"10.00\"
+  }")
+
+  success5=$(json_field "$r5" "['success']")
+  result_status=$(json_field "$r5" "['data']['status']")
+  eci=$(json_field "$r5" "['data']['eci']")
+  auth_value=$(json_field "$r5" "['data']['authentication_value']")
+  ds_trans_ref=$(json_field "$r5" "['data']['ds_trans_ref']")
+
+  if ! is_true "$success5"; then
+    fail "Authentication result lookup failed: $(json_field "$r5" "['error']")"
+    echo ""
+    return
+  fi
+
+  info "Auth result: status=${result_status}, eci=${eci}"
+  pass "Authentication result lookup"
+
+  if ! is_final_auth "$result_status"; then
+    pass "Payment skipped — authentication did not reach final authenticated/acknowledged state"
+    echo ""
+    return
+  fi
+
+  local r6 success6 transaction_id result_code payment_status
+  r6=$(post "/api/authorize-payment" "{
+    \"card_number\": \"${card}\",
+    \"exp_month\": \"12\",
+    \"exp_year\": \"2026\",
+    \"cvn\": \"123\",
+    \"cardholder_name\": \"Test User\",
+    \"amount\": \"10.00\",
+    \"currency\": \"GBP\",
+    \"authentication_id\": \"${server_trans_id}\",
+    \"three_ds\": {
+      \"authentication_id\": \"${server_trans_id}\",
+      \"authentication_value\": \"${auth_value}\",
+      \"eci\": \"${eci}\",
+      \"server_trans_ref\": \"${server_trans_id}\",
+      \"ds_trans_ref\": \"${ds_trans_ref}\",
+      \"message_version\": \"${message_version}\"
+    }
+  }")
+
+  success6=$(json_field "$r6" "['success']")
+  transaction_id=$(json_field "$r6" "['data']['transaction_id']")
+  result_code=$(json_field "$r6" "['data']['result_code']")
+  payment_status=$(json_field "$r6" "['data']['status']")
+
+  if ! is_true "$success6"; then
+    fail "Payment authorization failed: $(json_field "$r6" "['error']")"
+    echo ""
+    return
+  fi
+
+  info "Payment: result=${result_code}, status=${payment_status}, id=${transaction_id:0:24}…"
+  pass "Payment authorization"
 
   echo ""
 }

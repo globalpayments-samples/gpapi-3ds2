@@ -1,7 +1,7 @@
 {
-  "name": "starter-template",
+  "name": "gpapi-3ds2-sandbox",
   "version": "1.0.0",
-  "description": "Global Payments SDK starter template for multiple languages",
+  "description": "Global Payments GP-API 3DS2 sandbox tester with Hosted Fields tokenization",
   "type": "commonjs",
   "scripts": {
     "start": "node nodejs/server.js",
@@ -9,9 +9,9 @@
   },
   "keywords": [
     "payments",
-    "sdk",
-    "template",
-    "starter"
+    "gp-api",
+    "3ds2",
+    "hosted-fields"
   ],
   "author": "",
   "license": "ISC",

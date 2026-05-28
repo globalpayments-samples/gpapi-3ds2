@@ -1,63 +1,67 @@
 # Java Backend
 
-Jakarta EE servlet deployed to Tomcat via the Maven Cargo plugin. Uses Java's built-in `HttpClient`. No GP SDK — direct HTTP to GP-API UCP endpoints.
+Jakarta servlet backend for the shared 3DS2 sample. Server-side Global Payments calls use `com.globalpayments:globalpayments-sdk`; the browser uses Hosted Fields for card entry.
 
-Runs on port **8080** (Docker host port **8004**). Requires **Java 21**.
+Default local port: `8004`. The Docker container listens on `8080` and maps to `8004`.
 
----
+Requires Java 21.
 
-## Files
-
-```
-src/main/java/com/globalpayments/example/GpApi3dsServlet.java   All routes and GP-API logic
-pom.xml   Jackson + dotenv-java + servlet-api + Cargo/Tomcat
-Dockerfile
-.env.example
-```
-
----
-
-## Setup
+## Run
 
 ```bash
 cp .env.example .env
-# fill in GP_APP_ID, GP_APP_KEY, GP_MERCHANT_ID, GP_ACCOUNT_NAME, GP_ACCOUNT_ID
-
 export JAVA_HOME=/usr/lib/jvm/java-21-openjdk
 mvn clean package cargo:run
 ```
 
-Server starts at `http://localhost:8080`.
+Or from the repo root:
 
----
-
-## Environment Variables
-
+```bash
+./run.sh dev java
+./run.sh smoke java
 ```
+
+## Environment
+
+```bash
 GP_APP_ID=
 GP_APP_KEY=
-GP_MERCHANT_ID=
+GP_API_ENVIRONMENT=sandbox
+
 GP_ACCOUNT_NAME=transaction_processing
 GP_ACCOUNT_ID=
+GP_TOKENIZATION_ACCOUNT_NAME=
+
+GP_PARTNER_MERCHANT_ID=
+
+METHOD_NOTIFICATION_URL=
+CHALLENGE_NOTIFICATION_URL=
+FRONTEND_ORIGIN=http://localhost:8000
 ```
 
----
+`CHALLENGE_NOTIFICATION_URL` must be HTTPS for 3DS auth calls. For browser challenge testing, expose this backend over HTTPS and point the notification URLs at `/3ds-method-notification` and `/3ds-challenge-notification`.
 
-## Endpoints
+## Routes
 
-```
+```text
 GET  /api/health
+GET  /api/tokenization-config
 POST /api/check-enrollment
 POST /api/initiate-auth
 POST /api/get-auth-result
 POST /api/authorize-payment
+
+GET/POST /3ds-method-notification
+GET/POST /3ds-challenge-notification
 ```
 
----
+## Files
 
-## Notes
+```text
+src/main/java/com/globalpayments/example/GpApi3dsServlet.java
+pom.xml
+Dockerfile
+.env.example
+```
 
-- GP-API returns gzip-encoded responses. The servlet detects the gzip magic bytes (`0x1F 0x8B`) and decompresses with `GZIPInputStream` before parsing JSON.
-- Token is stored in a `volatile` field and regenerated thread-safely when under 60 seconds to expiry.
-- Always build with `mvn clean package` — stale `.class` files from a different JDK version will cause `UnsupportedClassVersionError` at runtime.
-- Make sure `JAVA_HOME` points to Java 21. The system default may be a newer version that produces class files incompatible with the Tomcat runtime.
+Use `mvn clean package` after changing JDK versions. Stale class files can cause `UnsupportedClassVersionError` when Tomcat starts.

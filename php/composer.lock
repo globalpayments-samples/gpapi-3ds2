@@ -4,20 +4,20 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "ee09e5e7e50a62c027bb4811ac8a572b",
+    "content-hash": "da74ca51a2c36e46c4cabc682b4e01b1",
     "packages": [
         {
             "name": "globalpayments/php-sdk",
-            "version": "13.3.0",
+            "version": "13.4.1",
             "source": {
                 "type": "git",
                 "url": "https://github.com/globalpayments/php-sdk.git",
-                "reference": "0baba695af2276cd74231e3b680d09f434cc3cad"
+                "reference": "b04bef9aedd2855ab832a03f7bb0220ff876d5ce"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/globalpayments/php-sdk/zipball/0baba695af2276cd74231e3b680d09f434cc3cad",
-                "reference": "0baba695af2276cd74231e3b680d09f434cc3cad",
+                "url": "https://api.github.com/repos/globalpayments/php-sdk/zipball/b04bef9aedd2855ab832a03f7bb0220ff876d5ce",
+                "reference": "b04bef9aedd2855ab832a03f7bb0220ff876d5ce",
                 "shasum": ""
             },
             "require": {
@@ -29,7 +29,8 @@
                 "ext-mbstring": "*",
                 "ext-openssl": "*",
                 "ext-zlib": "*",
-                "php": ">= 8.0"
+                "php": ">= 8.0",
+                "symfony/process": "7.1.8"
             },
             "require-dev": {
                 "phpstan/phpstan": "^0.12",
@@ -55,9 +56,9 @@
             "homepage": "https://developer.heartlandpaymentsystems.com/documentation",
             "support": {
                 "issues": "https://github.com/globalpayments/php-sdk/issues",
-                "source": "https://github.com/globalpayments/php-sdk/tree/13.3.0"
+                "source": "https://github.com/globalpayments/php-sdk/tree/13.4.1"
             },
-            "time": "2025-07-10T12:28:43+00:00"
+            "time": "2025-10-23T12:09:35+00:00"
         },
         {
             "name": "graham-campbell/result-type",
@@ -437,6 +438,67 @@
             "time": "2025-01-02T08:10:11+00:00"
         },
         {
+            "name": "symfony/process",
+            "version": "v7.1.8",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/symfony/process.git",
+                "reference": "42783370fda6e538771f7c7a36e9fa2ee3a84892"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/symfony/process/zipball/42783370fda6e538771f7c7a36e9fa2ee3a84892",
+                "reference": "42783370fda6e538771f7c7a36e9fa2ee3a84892",
+                "shasum": ""
+            },
+            "require": {
+                "php": ">=8.2"
+            },
+            "type": "library",
+            "autoload": {
+                "psr-4": {
+                    "Symfony\\Component\\Process\\": ""
+                },
+                "exclude-from-classmap": [
+                    "/Tests/"
+                ]
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "MIT"
+            ],
+            "authors": [
+                {
+                    "name": "Fabien Potencier",
+                    "email": "fabien@symfony.com"
+                },
+                {
+                    "name": "Symfony Community",
+                    "homepage": "https://symfony.com/contributors"
+                }
+            ],
+            "description": "Executes commands in sub-processes",
+            "homepage": "https://symfony.com",
+            "support": {
+                "source": "https://github.com/symfony/process/tree/v7.1.8"
+            },
+            "funding": [
+                {
+                    "url": "https://symfony.com/sponsor",
+                    "type": "custom"
+                },
+                {
+                    "url": "https://github.com/fabpot",
+                    "type": "github"
+                },
+                {
+                    "url": "https://tidelift.com/funding/github/packagist/symfony/symfony",
+                    "type": "tidelift"
+                }
+            ],
+            "time": "2024-11-06T14:23:19+00:00"
+        },
+        {
             "name": "vlucas/phpdotenv",
             "version": "v5.6.2",
             "source": {
@@ -527,7 +589,9 @@
     "stability-flags": {},
     "prefer-stable": false,
     "prefer-lowest": false,
-    "platform": {},
+    "platform": {
+        "php": ">=8.1"
+    },
     "platform-dev": {},
-    "plugin-api-version": "2.6.0"
+    "plugin-api-version": "2.9.0"
 }

@@ -135,7 +135,152 @@
         .step-result dl    { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; margin: 6px 0 0; }
         .step-result dt    { font-weight: 600; white-space: nowrap; }
         .step-result dd    { margin: 0; word-break: break-all; font-family: monospace; font-size: 12px; }
+
+        .mode-switch {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-bottom: 16px;
+        }
+        .mode-switch label {
+            flex: 1;
+            min-width: 180px;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 10px 12px;
+            cursor: pointer;
+            background: #fff;
+            font-size: 13px;
+        }
+        .mode-switch input { margin-right: 8px; }
+        .mode-switch label:has(input:checked) { border-color: #2196F3; background: #e8f4fd; }
+        .selected-card {
+            display: none;
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 10px 12px;
+            margin-bottom: 16px;
+            font-size: 13px;
+        }
+        .selected-card-grid {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 8px;
+        }
+        .selected-card-item {
+            display: flex;
+            min-width: 0;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            border: 1px solid #dee2e6;
+            border-radius: 6px;
+            background: #fff;
+            padding: 8px 10px;
+        }
+        .selected-card-value {
+            min-width: 0;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            font-family: monospace;
+        }
+        .copy-card-value {
+            flex: 0 0 auto;
+            border: 1px solid #ced4da;
+            border-radius: 5px;
+            background: #f8f9fa;
+            color: #343a40;
+            cursor: pointer;
+            font: inherit;
+            font-size: 12px;
+            padding: 3px 7px;
+        }
+        .copy-card-value:hover {
+            background: #e9f5fb;
+            border-color: #90caf9;
+        }
+        .hosted-field {
+            min-height: 56px;
+            border: 1px solid #ced4da;
+            border-radius: 6px;
+            background: #fff;
+            padding: 0 12px;
+            box-sizing: border-box;
+            overflow: hidden;
+            position: relative;
+            width: 100%;
+        }
+        .hosted-field:focus-within {
+            border-color: #0072ce;
+            box-shadow: 0 0 0 3px rgba(0, 114, 206, 0.12);
+        }
+        .hosted-field iframe {
+            border: 0 !important;
+            display: block !important;
+            height: 54px !important;
+            max-width: 100% !important;
+            min-width: 0 !important;
+            width: 100% !important;
+        }
+        #hosted-card-fields .gp-form-row {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) minmax(96px, 140px);
+            gap: 12px;
+        }
+        #hosted-card-fields .gp-form-row:has(#hosted-card-expiration) {
+            grid-template-columns: minmax(120px, 0.8fr) minmax(0, 1.2fr);
+        }
+        #hosted-card-fields .gp-form-group {
+            min-width: 0;
+        }
+        .hosted-actions { margin-top: 8px; }
+        .hosted-actions iframe {
+            max-width: 100% !important;
+            width: 100% !important;
+        }
+        .diagnostic-note {
+            background: #fff9c4;
+            border-left: 4px solid #FFC107;
+            border-radius: 8px;
+            padding: 10px 12px;
+            margin-bottom: 16px;
+            font-size: 13px;
+        }
+        .diagnostic-only.hidden {
+            display: none !important;
+        }
+        .main-layout {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+            gap: 24px;
+            align-items: start;
+        }
+        @media (max-width: 900px) {
+            .main-layout {
+                grid-template-columns: minmax(0, 1fr);
+            }
+        }
+        @media (max-width: 520px) {
+            #hosted-card-fields .gp-form-row,
+            #hosted-card-fields .gp-form-row:has(#hosted-card-expiration) {
+                grid-template-columns: minmax(0, 1fr);
+            }
+            #hosted-card-fields .gp-form-group[style] {
+                max-width: none !important;
+            }
+            .mode-switch label {
+                min-width: 0;
+            }
+            .selected-card-grid {
+                grid-template-columns: minmax(0, 1fr);
+            }
+        }
+        .hidden { display: none !important; }
     </style>
+    <script src="https://js.globalpay.com/4.1.12/globalpayments.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/globalpayments-3ds@1.8.7/dist/globalpayments-3ds.min.js"></script>
 </head>
 <body>
     <!-- Header -->
@@ -150,8 +295,8 @@
                 </div>
                 <nav class="gp-header-nav">
                     <a href="https://developer.globalpay.com/">Documentation</a>
-                    <a href="https://developer.globalpay.com/api">API Reference</a>
-                    <a href="https://developer.globalpay.com/sdks">SDKs</a>
+                    <a href="https://developer.globalpayments.com/api/references-overview">API Reference</a>
+                    <a href="https://developer.globalpayments.com/docs/integration-options/sdk/overview">SDKs</a>
                 </nav>
             </div>
         </div>
@@ -176,7 +321,7 @@
             </div>
         </div>
 
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px; align-items: start;">
+        <div class="main-layout">
 
             <!-- LEFT COLUMN: Form -->
             <div>
@@ -184,7 +329,7 @@
                 <div class="gp-card" style="margin-bottom: 16px;">
                     <div class="gp-card-header">
                         <h2 class="gp-card-title">Test Cards</h2>
-                        <p class="gp-card-description">Click to populate the form. All use expiry 12/2026, CVV 123.</p>
+                        <p class="gp-card-description">Click to select a sandbox card. Hosted Fields mode copies the card number and shows the rest for manual entry; diagnostic mode fills the raw inputs.</p>
                     </div>
                     <div class="test-cards-grid">
                         <button class="test-card-btn" onclick="fillCard('4263970000005262','12','2026','Frictionless Visa')">
@@ -226,11 +371,50 @@
                         <h2 class="gp-card-title">Card Details</h2>
                     </div>
                     <form id="payment-form" class="gp-form" onsubmit="runFlow(event)">
-                        <div class="gp-form-row">
+                        <div class="mode-switch">
+                            <label>
+                                <input type="radio" name="integration_mode" value="hosted" checked onchange="setIntegrationMode('hosted')">
+                                Hosted Fields
+                            </label>
+                            <label>
+                                <input type="radio" name="integration_mode" value="diagnostic" onchange="setIntegrationMode('diagnostic')">
+                                Diagnostic raw-card API
+                            </label>
+                        </div>
+
+                        <div id="selected-card" class="selected-card"></div>
+
+                        <div id="hosted-card-fields">
+                            <div class="gp-form-row">
+                                <div class="gp-form-group">
+                                    <label class="gp-label">Card Number</label>
+                                    <div id="hosted-card-number" class="hosted-field"></div>
+                                </div>
+                                <div class="gp-form-group" style="max-width: 140px;">
+                                    <label class="gp-label">CVV</label>
+                                    <div id="hosted-card-cvv" class="hosted-field"></div>
+                                </div>
+                            </div>
+                            <div class="gp-form-row">
+                                <div class="gp-form-group">
+                                    <label class="gp-label">Expiry</label>
+                                    <div id="hosted-card-expiration" class="hosted-field"></div>
+                                </div>
+                                <div class="gp-form-group">
+                                    <label class="gp-label">Cardholder Name</label>
+                                    <div id="hosted-card-holder-name" class="hosted-field"></div>
+                                </div>
+                            </div>
+                            <div id="hosted-status" style="font-size: 13px; color: #888; margin-bottom: 8px;">Hosted Fields initializing...</div>
+                        </div>
+
+                        <div id="diagnostic-card-fields" class="hidden">
+                            <div class="diagnostic-note">Diagnostic mode sends sandbox card data directly to the backend API. Use Hosted Fields for the customer-facing path.</div>
+                            <div class="gp-form-row">
                             <div class="gp-form-group">
                                 <label for="card_number" class="gp-label">Card Number</label>
                                 <input type="text" id="card_number" name="card_number" class="gp-input"
-                                    placeholder="4263970000005262" maxlength="19" required
+                                    placeholder="4263970000005262" maxlength="19"
                                     style="font-family: monospace;" autocomplete="cc-number">
                             </div>
                             <div class="gp-form-group" style="max-width: 100px;">
@@ -243,15 +427,16 @@
                             <div class="gp-form-group">
                                 <label for="exp_month" class="gp-label">Expiry Month</label>
                                 <input type="text" id="exp_month" name="exp_month" class="gp-input"
-                                    placeholder="12" maxlength="2" required autocomplete="cc-exp-month">
+                                    placeholder="12" maxlength="2" autocomplete="cc-exp-month">
                             </div>
                             <div class="gp-form-group">
                                 <label for="exp_year" class="gp-label">Expiry Year</label>
                                 <input type="text" id="exp_year" name="exp_year" class="gp-input"
-                                    placeholder="2026" maxlength="4" required autocomplete="cc-exp-year">
+                                    placeholder="2026" maxlength="4" autocomplete="cc-exp-year">
                             </div>
                         </div>
-                        <div class="gp-form-group">
+                        </div>
+                        <div id="diagnostic-cardholder" class="gp-form-group diagnostic-only hidden">
                             <label for="cardholder_name" class="gp-label">Cardholder Name</label>
                             <input type="text" id="cardholder_name" name="cardholder_name" class="gp-input"
                                 value="John Doe" required autocomplete="cc-name">
@@ -272,7 +457,8 @@
                             </div>
                         </div>
 
-                        <button type="submit" id="submit-btn" class="gp-button gp-button-primary gp-button-full">
+                        <div id="hosted-submit" class="hosted-actions"></div>
+                        <button type="submit" id="submit-btn" class="gp-button gp-button-primary gp-button-full hidden">
                             Run 3DS2 Flow
                         </button>
                         <button type="button" class="gp-button gp-button-full" style="margin-top: 8px;"
@@ -382,13 +568,13 @@
             <div class="gp-footer-content">
                 <div class="gp-footer-section">
                     <p class="gp-footer-copyright">
-                        © 2024 Global Payments. All rights reserved.
+                        © 2024-<span id="footer-year">2026</span> Global Payments. All rights reserved.
                     </p>
                 </div>
                 <div class="gp-footer-section">
                     <nav class="gp-footer-nav">
                         <a href="https://developer.globalpay.com/" class="gp-footer-link">Developer Portal</a>
-                        <a href="https://developer.globalpay.com/api" class="gp-footer-link">API Reference</a>
+                        <a href="https://developer.globalpayments.com/api/references-overview" class="gp-footer-link">API Reference</a>
                     </nav>
                 </div>
             </div>
@@ -401,7 +587,13 @@ const state = {
   serverTransId:  null,
   messageVersion: null,
   authData:       null,
+  selectedCard:   null,
+  hostedForm:     null,
+  hostedReady:    false,
+  integrationMode: 'hosted',
 };
+
+document.getElementById('footer-year').textContent = new Date().getFullYear();
 
 // ─── Backend URL ─────────────────────────────────────────────────────────────
 function backendUrl() {
@@ -418,6 +610,7 @@ async function checkHealth() {
     const d = await r.json();
     el.textContent = `✓ ${d.backend || 'backend'} online`;
     el.style.color = '#2e7d32';
+    await initHostedFields();
   } catch {
     el.textContent = '✗ backend unreachable';
     el.style.color = '#b71c1c';
@@ -427,12 +620,69 @@ document.getElementById('backend-selector').addEventListener('change', checkHeal
 checkHealth();
 
 // ─── Test card fill ───────────────────────────────────────────────────────────
+async function copyText(value, label) {
+  try {
+    await navigator.clipboard.writeText(value);
+    const selected = document.getElementById('selected-card');
+    selected.dataset.copyStatus = `${label} copied`;
+  } catch {
+    const selected = document.getElementById('selected-card');
+    selected.dataset.copyStatus = `Select and copy ${label.toLowerCase()}`;
+  }
+  renderSelectedCard();
+}
+
+function renderSelectedCard() {
+  const selected = document.getElementById('selected-card');
+  const card = state.selectedCard;
+  if (!card) {
+    selected.style.display = 'none';
+    selected.innerHTML = '';
+    return;
+  }
+
+  const status = selected.dataset.copyStatus || 'Card selected';
+  selected.style.display = 'block';
+  selected.innerHTML = `
+    <div style="margin-bottom: 8px; color: #495057;">${card.name} · ${status}</div>
+    <div class="selected-card-grid">
+      ${selectedCardItem('Number', card.num)}
+      ${selectedCardItem('Expiry', `${card.month}/${card.year}`)}
+      ${selectedCardItem('CVV', card.cvn)}
+      ${selectedCardItem('Name', card.name)}
+    </div>`;
+}
+
+function selectedCardItem(label, value) {
+  return `
+    <div class="selected-card-item">
+      <span class="selected-card-value" title="${value}">${value}</span>
+      <button type="button" class="copy-card-value" onclick="copyText('${value}', '${label}')">Copy</button>
+    </div>`;
+}
+
 function fillCard(num, month, year, name) {
+  state.selectedCard = { num, month, year, name, cvn: '123' };
+  const selected = document.getElementById('selected-card');
+  selected.dataset.copyStatus = state.integrationMode === 'hosted' ? 'Card number copied' : 'Diagnostic fields filled';
+  renderSelectedCard();
+  if (state.integrationMode === 'hosted') {
+    copyText(num, 'Card number');
+  }
   document.getElementById('card_number').value  = num;
   document.getElementById('exp_month').value    = month;
   document.getElementById('exp_year').value     = year;
   document.getElementById('cvn').value          = '123';
   document.getElementById('cardholder_name').value = name;
+}
+
+function setIntegrationMode(mode) {
+  state.integrationMode = mode;
+  document.getElementById('hosted-card-fields').classList.toggle('hidden', mode !== 'hosted');
+  document.getElementById('hosted-submit').classList.toggle('hidden', mode !== 'hosted');
+  document.getElementById('diagnostic-card-fields').classList.toggle('hidden', mode !== 'diagnostic');
+  document.getElementById('diagnostic-cardholder').classList.toggle('hidden', mode !== 'diagnostic');
+  document.getElementById('submit-btn').classList.toggle('hidden', mode !== 'diagnostic');
 }
 
 // ─── Flow step UI helpers ─────────────────────────────────────────────────────
@@ -460,6 +710,9 @@ function setLoading(loading) {
   const btn = document.getElementById('submit-btn');
   btn.disabled = loading;
   btn.textContent = loading ? 'Processing…' : 'Run 3DS2 Flow';
+  const hosted = document.getElementById('hosted-submit');
+  hosted.style.pointerEvents = loading ? 'none' : '';
+  hosted.style.opacity = loading ? '0.6' : '';
 }
 
 function resetFlow() {
@@ -483,6 +736,165 @@ async function api(endpoint, body) {
     body:    JSON.stringify(body),
   });
   return r.json();
+}
+
+async function apiGet(endpoint) {
+  const r = await fetch(`${backendUrl()}${endpoint}`);
+  return r.json();
+}
+
+function tokenPaymentReference(resp) {
+  return resp?.paymentReference || resp?.payment_reference || resp?.id ||
+    resp?.payment_method?.id || resp?.paymentMethod?.id || resp?.token;
+}
+
+async function initHostedFields() {
+  const status = document.getElementById('hosted-status');
+  state.hostedReady = false;
+
+  if (!window.GlobalPayments?.configure || !window.GlobalPayments?.ui?.form) {
+    status.textContent = 'Hosted Fields library unavailable. Use diagnostic mode while offline.';
+    status.style.color = '#b71c1c';
+    return;
+  }
+
+  try {
+    status.textContent = 'Hosted Fields initializing...';
+    status.style.color = '#888';
+    document.getElementById('hosted-submit').innerHTML = '';
+    ['hosted-card-number', 'hosted-card-cvv', 'hosted-card-expiration', 'hosted-card-holder-name']
+      .forEach((id) => { document.getElementById(id).innerHTML = ''; });
+
+    const config = await apiGet('/api/tokenization-config');
+    if (!config.success) throw new Error(config.error || 'Tokenization config failed');
+
+    state.hostedForm = GlobalPayments.ui.form({
+      fields: {
+        'card-number': {
+          target: '#hosted-card-number',
+          placeholder: '•••• •••• •••• ••••',
+        },
+        'card-expiration': {
+          target: '#hosted-card-expiration',
+          placeholder: 'MM / YYYY',
+        },
+        'card-cvv': {
+          target: '#hosted-card-cvv',
+          placeholder: '•••',
+        },
+        'card-holder-name': {
+          target: '#hosted-card-holder-name',
+          placeholder: 'John Doe',
+        },
+        submit: {
+          target: '#hosted-submit',
+          text: 'Tokenize + Run 3DS2 Flow',
+          value: 'Tokenize + Run 3DS2 Flow',
+        },
+      },
+      styles: {
+        input: {
+          'font-family': 'DM Sans, Arial, sans-serif',
+          'font-size': '15px',
+          color: '#212529',
+          border: '0',
+          'box-shadow': 'none',
+          outline: 'none',
+          background: 'transparent',
+          margin: '0',
+          padding: '0',
+          width: '100%',
+          height: '54px',
+          'line-height': '54px',
+        },
+        'input[type=text]': {
+          border: '0',
+          'box-shadow': 'none',
+          outline: 'none',
+          background: 'transparent',
+          margin: '0',
+          padding: '0',
+          width: '100%',
+          height: '54px',
+          'line-height': '54px',
+        },
+        'input[type=tel]': {
+          border: '0',
+          'box-shadow': 'none',
+          outline: 'none',
+          background: 'transparent',
+          margin: '0',
+          padding: '0',
+          width: '100%',
+          height: '54px',
+          'line-height': '54px',
+        },
+        '#secure-payment-field': {
+          border: '0',
+          'box-shadow': 'none',
+          outline: 'none',
+          background: 'transparent',
+          margin: '0',
+          padding: '0',
+          width: '100%',
+          height: '54px',
+        },
+        '#secure-payment-field[type=button]': {
+          'background-color': '#0072ce',
+          color: '#fff',
+          border: '0',
+          'border-radius': '6px',
+          cursor: 'pointer',
+          'font-weight': '700',
+          width: '100%',
+        },
+      },
+    });
+
+    GlobalPayments.configure({
+      accessToken: config.data.accessToken,
+      env: config.data.env || 'sandbox',
+      accountName: config.data.accountName,
+      apiVersion: config.data.apiVersion || '2021-03-22',
+      requireCardHolderName: true,
+    });
+
+    state.hostedForm.ready(() => {
+      state.hostedReady = true;
+      status.textContent = 'Hosted Fields ready.';
+      status.style.color = '#2e7d32';
+    });
+
+    state.hostedForm.on('token-success', async (resp) => {
+      const paymentMethodId = tokenPaymentReference(resp);
+      const tokenCardholderName = resp?.details?.cardholderName || resp?.details?.cardholder_name || resp?.cardholderName;
+      if (tokenCardholderName) {
+        document.getElementById('cardholder_name').value = tokenCardholderName;
+      }
+      resetFlow();
+      setLoading(true);
+      showResult(1, `<strong>Tokenized:</strong> ${paymentMethodId || 'token received'}`, 'ok');
+      showRaw(1, resp);
+      if (!paymentMethodId) {
+        showResult(1, 'Tokenization succeeded but no payment method reference was returned.', 'err');
+        setStep(1, 'error');
+        setLoading(false);
+        return;
+      }
+      await runApiFlow({ payment_method_id: paymentMethodId, token_raw: resp });
+    });
+
+    state.hostedForm.on('token-error', (resp) => {
+      resetFlow();
+      showResult(1, `<strong>Tokenization error:</strong> ${JSON.stringify(resp)}`, 'err');
+      showRaw(1, resp);
+      setStep(1, 'error');
+      setLoading(false);
+    });
+  } catch (err) {
+    status.textContent = `Hosted Fields unavailable: ${err.message}`;
+    status.style.color = '#b71c1c';
+  }
 }
 
 // ─── Method URL (device fingerprinting) ──────────────────────────────────────
@@ -511,8 +923,19 @@ function closeAcsModal() {
 // ─── Main flow ────────────────────────────────────────────────────────────────
 async function runFlow(event) {
   event.preventDefault();
+  if (state.integrationMode === 'hosted') {
+    showResult(1, state.hostedReady
+      ? 'Use the Hosted Fields button to tokenize and start the flow.'
+      : 'Hosted Fields are not ready yet. Check tokenization credentials or use diagnostic mode.', state.hostedReady ? 'warn' : 'err');
+    return;
+  }
   resetFlow();
   setLoading(true);
+  await runApiFlow({});
+}
+
+async function runApiFlow({ payment_method_id = null, token_raw = null }) {
+  if (token_raw) showRaw(1, token_raw);
 
   const card_number     = document.getElementById('card_number').value.replace(/\s/g, '');
   const exp_month       = document.getElementById('exp_month').value.trim();
@@ -525,7 +948,9 @@ async function runFlow(event) {
   // ── Step 1: Enrollment check ──────────────────────────────────────────────
   setStep(1, 'active');
   try {
-    const r1 = await api('/api/check-enrollment', { card_number, exp_month, exp_year });
+    const r1 = await api('/api/check-enrollment', payment_method_id
+      ? { payment_method_id }
+      : { card_number, exp_month, exp_year });
 
     if (!r1.success) {
       showResult(1, `<strong>Error:</strong> ${r1.error || 'Check-enrollment failed'}`, 'err');
@@ -537,12 +962,13 @@ async function runFlow(event) {
 
     state.serverTransId  = r1.data.server_trans_id;
     state.messageVersion = r1.data.message_version;
+    const enrolledOk = ['Y', 'ENROLLED'].includes(r1.data.enrolled);
     showResult(1, `
       <dl>
         <dt>Enrolled</dt><dd>${r1.data.enrolled}</dd>
         <dt>Server Trans ID</dt><dd>${r1.data.server_trans_id}</dd>
         <dt>Method URL</dt><dd>${r1.data.method_url || 'N/A'}</dd>
-      </dl>`, r1.data.enrolled === 'Y' ? 'ok' : 'warn');
+      </dl>`, enrolledOk ? 'ok' : 'warn');
     showRaw(1, r1.raw);
     setStep(1, 'done');
 
@@ -574,13 +1000,16 @@ async function runFlow(event) {
       timezone:             String(new Date().getTimezoneOffset()),
       user_agent:           navigator.userAgent,
     };
+    const threeDs = window.GlobalPayments?.ThreeDSecure;
+    const libraryBrowserData = threeDs?.getBrowserData ? threeDs.getBrowserData() : null;
 
     const r3 = await api('/api/initiate-auth', {
       server_trans_id:       state.serverTransId,
       message_version:       state.messageVersion,
       method_url_completion: methodCompletion,
+      payment_method_id,
       card_number, exp_month, exp_year, cardholder_name,
-      browser_data: browserData,
+      browser_data: libraryBrowserData || browserData,
       order: { amount, currency },
     });
 
@@ -606,23 +1035,38 @@ async function runFlow(event) {
     // ── Step 4: Challenge (if required) ───────────────────────────────────
     if (r3.data.status === 'CHALLENGE_REQUIRED') {
       setStep(4, 'active');
-      if (!r3.data.acs_challenge_url) {
+      const challenge = r3.data.challenge || {};
+      if (!challenge.requestUrl && !r3.data.acs_challenge_url) {
         showResult(4, 'Challenge required but no ACS challenge URL returned.', 'err');
         setStep(4, 'error');
         setLoading(false);
         return;
       }
-      showResult(4, 'ACS challenge launched. Complete it in the popup, then the flow continues.', 'warn');
-      openAcsModal(r3.data.acs_challenge_url);
 
-      // Poll for challenge completion (wait for user to close modal)
-      await new Promise(resolve => {
-        const btn = document.querySelector('#acs-modal .raw-toggle');
-        const original = btn.onclick;
-        btn.onclick = () => { original(); resolve(); };
-      });
+      if (threeDs?.handleInitiateAuthentication && challenge.requestUrl) {
+        showResult(4, 'ACS challenge launched. Complete it in the challenge window, then the flow continues.', 'warn');
+        const challengeResult = await threeDs.handleInitiateAuthentication(r3.data, {
+          windowSize: threeDs.ChallengeWindowSize?.Windowed600x400,
+          displayMode: 'lightbox',
+        });
+        state.authData = challengeResult;
+        const challengeData = challengeResult.challenge?.response?.data || {};
+        if (challengeData.threeDSServerTransID) {
+          state.authData.server_trans_id = challengeData.threeDSServerTransID;
+        }
+        showRaw(4, challengeResult);
+        showResult(4, `Challenge completed with status ${challengeData.transStatus || 'received'}.`, 'ok');
+      } else {
+        showResult(4, 'ACS challenge launched. Complete it in the popup, then close the popup to continue.', 'warn');
+        openAcsModal(r3.data.acs_challenge_url);
+        await new Promise(resolve => {
+          const btn = document.querySelector('#acs-modal .raw-toggle');
+          const original = btn.onclick;
+          btn.onclick = () => { original(); resolve(); };
+        });
+        showResult(4, 'Challenge window closed.', 'ok');
+      }
       setStep(4, 'done');
-      showResult(4, 'Challenge window closed.', 'ok');
     } else {
       setStep(4, 'done');
       showResult(4, r3.data.status === 'SUCCESS_AUTHENTICATED'
@@ -632,7 +1076,34 @@ async function runFlow(event) {
 
     // ── Step 5: Get Auth Result ────────────────────────────────────────────
     setStep(5, 'active');
-    const r5 = await api('/api/get-auth-result', { server_trans_id: state.authData.server_trans_id });
+    let r5;
+    const initiateHasFinalAuth = ['SUCCESS_AUTHENTICATED', 'ATTEMPT_ACKNOWLEDGED'].includes(r3.data.status)
+      && (r3.data.authentication_value || r3.data.eci);
+
+    if (initiateHasFinalAuth) {
+      r5 = {
+        success: true,
+        data: {
+          status: r3.data.status,
+          eci: r3.data.eci,
+          authentication_value: r3.data.authentication_value,
+          ds_trans_ref: r3.data.ds_trans_ref,
+          message_version: r3.data.message_version,
+          server_trans_ref: r3.data.server_trans_ref || state.authData.server_trans_id,
+        },
+        raw: r3.raw,
+      };
+      showResult(5, 'Final authentication data returned by initiate-auth.', 'ok');
+    } else if (r3.data.status === 'AVAILABLE') {
+      showResult(5, 'Authentication is still AVAILABLE. Device fingerprint/method notification has not produced a final authentication result yet.', 'warn');
+      showResult(6, 'Payment not attempted until authentication reaches a final authenticated or acknowledged status.', 'warn');
+      setStep(5, 'error');
+      setStep(6, 'error');
+      setLoading(false);
+      return;
+    } else {
+      r5 = await api('/api/get-auth-result', { server_trans_id: state.authData.server_trans_id });
+    }
 
     if (!r5.success) {
       showResult(5, `<strong>Error:</strong> ${r5.error || 'Get-auth-result failed'}`, 'err');
@@ -662,12 +1133,16 @@ async function runFlow(event) {
 
     // ── Step 6: Authorize Payment ──────────────────────────────────────────
     setStep(6, 'active');
+    const authenticationId = state.authData.server_trans_id || state.serverTransId || r5.data.server_trans_ref;
     const r6 = await api('/api/authorize-payment', {
-      card_number, exp_month, exp_year, cvn, amount, currency,
+      payment_method_id,
+      authentication_id: authenticationId,
+      card_number, exp_month, exp_year, cvn, amount, currency, cardholder_name,
       three_ds: {
+        authentication_id: authenticationId,
         authentication_value: r5.data.authentication_value,
         eci:                  r5.data.eci,
-        server_trans_ref:     r5.data.server_trans_ref || state.serverTransId,
+        server_trans_ref:     authenticationId,
         ds_trans_ref:         r5.data.ds_trans_ref,
         message_version:      r5.data.message_version || '2.2.0',
       },

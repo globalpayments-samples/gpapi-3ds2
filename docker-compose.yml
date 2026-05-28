@@ -8,7 +8,7 @@ services:
     networks:
       - gp3ds
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/index.html"]
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://127.0.0.1/index.html"]
       interval: 10s
       timeout: 5s
       retries: 3
@@ -18,15 +18,16 @@ services:
       context: ./nodejs
       dockerfile: Dockerfile
     ports:
-      - "8001:3001"
+      - "3001:3001"
     env_file:
       - ./nodejs/.env
     environment:
       - PORT=3001
+      - FRONTEND_ORIGIN=http://localhost:8000
     networks:
       - gp3ds
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3001/api/health"]
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--output-document=-", "http://127.0.0.1:3001/api/health"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -40,10 +41,12 @@ services:
       - "8003:8080"
     env_file:
       - ./php/.env
+    environment:
+      - FRONTEND_ORIGIN=http://localhost:8000
     networks:
       - gp3ds
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/api/health"]
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--output-document=-", "http://127.0.0.1:8080/api/health"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -59,10 +62,12 @@ services:
       - ./dotnet/.env
     environment:
       - ASPNETCORE_URLS=http://+:8080
+      - GP_SAMPLE_PORT=8080
+      - FRONTEND_ORIGIN=http://localhost:8000
     networks:
       - gp3ds
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/api/health"]
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--output-document=-", "http://127.0.0.1:8080/api/health"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -76,10 +81,12 @@ services:
       - "8004:8080"
     env_file:
       - ./java/.env
+    environment:
+      - FRONTEND_ORIGIN=http://localhost:8000
     networks:
       - gp3ds
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/api/health"]
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--output-document=-", "http://127.0.0.1:8080/api/health"]
       interval: 10s
       timeout: 5s
       retries: 5

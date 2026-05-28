@@ -7,15 +7,10 @@ use Dotenv\Dotenv;
 $dotenv = Dotenv::createUnsafeMutable(__DIR__ . '/..');
 $dotenv->load();
 
-$input = json_decode(file_get_contents('php://input'), true) ?? [];
-
 try {
-    $secure = GpApiClient::initiateAuthentication($input);
-
     GpApiClient::jsonResponse([
         'success' => true,
-        'data' => GpApiClient::mapAuthentication($secure),
-        'raw' => $secure,
+        'data' => GpApiClient::tokenizationConfig(),
     ]);
 } catch (\Throwable $e) {
     GpApiClient::errorResponse($e);

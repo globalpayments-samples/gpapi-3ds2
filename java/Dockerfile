@@ -8,7 +8,8 @@ RUN mvn dependency:go-offline -B
 
 # Copy source code
 COPY src ./src
+RUN mvn -q -DskipTests package
 
 EXPOSE 8080
 
-CMD ["mvn", "cargo:run", "-DskipTests", "-Dquiet"]
+CMD ["mvn", "cargo:run", "-DskipTests", "-Dquiet", "-Dgpapi.cargo.port=8080"]

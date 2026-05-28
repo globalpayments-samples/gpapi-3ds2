@@ -4,5 +4,6 @@ require_once __DIR__ . '/../vendor/autoload.php';
 require_once __DIR__ . '/../src/GpApiClient.php';
 
 header('Content-Type: application/json');
-header('Access-Control-Allow-Origin: *');
+header('Access-Control-Allow-Origin: ' . (getenv('FRONTEND_ORIGIN') ?: 'http://localhost:8000'));
+header('Vary: Origin');
 echo json_encode(['status' => 'ok', 'backend' => 'php', 'version' => '1.0.0']);

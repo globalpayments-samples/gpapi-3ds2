@@ -8,52 +8,17 @@ $dotenv = Dotenv::createUnsafeMutable(__DIR__ . '/..');
 $dotenv->load();
 
 $input      = json_decode(file_get_contents('php://input'), true) ?? [];
-$cardNumber = $input['card_number'] ?? '';
-$expMonth   = $input['exp_month']   ?? '';
-$expYear    = $input['exp_year']    ?? '';
-$cvn        = $input['cvn']         ?? '';
-$amount     = $input['amount']      ?? '10.00';
-$currency   = $input['currency']    ?? 'GBP';
 $threeDsIn  = $input['three_ds']    ?? [];
+$authenticationId = $input['authentication_id'] ?? ($threeDsIn['authentication_id'] ?? ($threeDsIn['server_trans_ref'] ?? null));
 
 try {
-    $raw = GpApiClient::request('POST', '/transactions', [
-        'account_name' => getenv('GP_ACCOUNT_NAME') ?: 'transaction_processing',
-        'channel'      => 'CNP',
-        'type'         => 'SALE',
-        'amount'       => GpApiClient::toMinorUnits($amount),
-        'currency'     => $currency,
-        'reference'    => GpApiClient::uuid(),
-        'country'      => 'GB',
-        'payment_method' => [
-            'entry_mode' => 'ECOM',
-            'card' => [
-                'number'       => $cardNumber,
-                'expiry_month' => $expMonth,
-                'expiry_year'  => GpApiClient::twoDigitYear($expYear),
-                'cvv'          => $cvn,
-            ],
-        ],
-        'three_ds' => [
-            'source'               => 'BROWSER',
-            'authentication_value' => $threeDsIn['authentication_value'] ?? null,
-            'server_trans_ref'     => $threeDsIn['server_trans_ref']     ?? null,
-            'ds_trans_ref'         => $threeDsIn['ds_trans_ref']         ?? null,
-            'eci'                  => $threeDsIn['eci']                  ?? null,
-            'message_version'      => $threeDsIn['message_version']      ?? '2.2.0',
-        ],
-    ]);
+    $secure = $authenticationId ? GpApiClient::getAuthenticationData((string)$authenticationId, (string)($input['amount'] ?? '10.00')) : null;
+    $transaction = GpApiClient::charge($input, $secure);
 
     GpApiClient::jsonResponse([
         'success' => true,
-        'data' => [
-            'transaction_id' => $raw['id'],
-            'status'         => $raw['status']                ?? null,
-            'result_code'    => $raw['action']['result_code'] ?? null,
-            'amount'         => $raw['amount']                ?? null,
-            'currency'       => $raw['currency']              ?? null,
-        ],
-        'raw' => $raw,
+        'data' => GpApiClient::mapTransaction($transaction),
+        'raw' => $transaction,
     ]);
 } catch (\Throwable $e) {
     GpApiClient::errorResponse($e);
