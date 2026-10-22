@@ -121,7 +121,7 @@ start_backend() {
       ;;
     php)
       log "Starting PHP backend on http://localhost:8003"
-      (cd php && FRONTEND_ORIGIN="${FRONTEND_ORIGIN:-http://localhost:${FRONTEND_PORT}}" php -S 0.0.0.0:8003 router.php) >/tmp/gpapi-3ds-php.log 2>&1 &
+      (cd php && PORT=8003 FRONTEND_ORIGIN="${FRONTEND_ORIGIN:-http://localhost:${FRONTEND_PORT}}" ./run.sh) >/tmp/gpapi-3ds-php.log 2>&1 &
       ;;
     dotnet)
       log "Starting .NET backend on http://localhost:8006"
