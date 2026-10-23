@@ -17,7 +17,7 @@
 - [`nodejs/run.sh`](nodejs/run.sh) — installs dependencies and starts `npm start`.
 - [`nodejs/.env.example`](nodejs/.env.example) — accurate Node env template.
 
-### PHP (CLI server, PHP 8.1+)
+### PHP (CLI server, PHP 8.2.35+, 8.3.36+, 8.4.27+, or 8.5.12+)
 - [`php/src/GpApiClient.php`](php/src/GpApiClient.php) — PHP reference client; `getAccessToken()`, `generateToken()`, `request()`, `toMinorUnits()`, and `errorResponse()` wrap direct UCP calls.
 - [`php/router.php`](php/router.php) — request dispatcher for all five public routes.
 - [`php/api/check-enrollment.php`](php/api/check-enrollment.php) — enrollment request and method-data response.
@@ -120,7 +120,7 @@ docker compose up --build
 cd nodejs && ./run.sh                         # Node.js -> http://localhost:3001
 cd java && ./run.sh                           # Java -> http://localhost:8080 (host 8004 via Docker)
 cd dotnet && ./run.sh                         # .NET -> http://localhost:8080
-cd php && composer install && php -S localhost:8080 router.php
+cd php && PORT=8080 ./run.sh
 ```
 
 Use a real browser for the full 3DS2 flow. The CLI smoke test cannot execute the method iframe or ACS challenge.

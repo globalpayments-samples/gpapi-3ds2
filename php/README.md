@@ -4,12 +4,17 @@ PHP backend for the shared 3DS2 sample. Server-side Global Payments calls use `g
 
 Default local port: `8003`. The Docker container listens on `8080` and maps to `8003`.
 
+## Requirements
+
+- PHP 8.2.35+, 8.3.36+, 8.4.27+, or 8.5.12+
+- Composer 2
+
 ## Run
 
 ```bash
 cp .env.example .env
 composer install
-php -S localhost:8003 router.php
+PORT=8003 ./run.sh
 ```
 
 Or from the repo root:
