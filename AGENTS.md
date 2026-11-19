@@ -11,7 +11,7 @@
 
 ## Repository Structure
 
-### Node.js (Express, Node 18+)
+### Node.js (Express, Node 24+)
 - [`nodejs/auth.js`](nodejs/auth.js) — reference token helper; `generateToken()` and `getAccessToken()` cache OAuth tokens for all GP-API calls.
 - [`nodejs/server.js`](nodejs/server.js) — Node implementation; `gpRequest()`, `toMinorUnits()`, `twoDigitYear()`, and inline route handlers at line ~82, ~90, ~145, ~245, and ~281 implement the public API.
 - [`nodejs/run.sh`](nodejs/run.sh) — installs dependencies and starts `npm start`.
