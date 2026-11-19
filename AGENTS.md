@@ -173,6 +173,6 @@ All language implementations expose identical behavior. If you change the reques
 
 - Node.js: `express` ^4.18.2, `dotenv` ^16.3.1
 - PHP: `vlucas/phpdotenv` ^5.5
-- Java: `jackson-databind` 2.17.0, `dotenv-java` 3.0.0, `jakarta.servlet-api` 5.0.0, Cargo Tomcat plugin 1.10.10
+- Java: `jackson-databind` 2.18.11, `dotenv-java` 3.0.0, `jakarta.servlet-api` 5.0.0, Cargo Tomcat plugin 1.10.10
 - .NET: `DotEnv.Net` 3.2.1
 - GP SDK usage: none; every backend calls GP-API directly over HTTP
