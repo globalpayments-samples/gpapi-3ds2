@@ -108,7 +108,10 @@ validate_backend_env() {
 
 start_frontend() {
   log "Starting frontend on http://localhost:${FRONTEND_PORT}"
-  python3 -m http.server "$FRONTEND_PORT" >/tmp/gpapi-3ds-frontend.log 2>&1 &
+  # Serve only the page, never the backend folders and their .env files
+  FRONTEND_DIR="$(mktemp -d)"
+  ln -s "$PWD/index.html" "$FRONTEND_DIR/index.html"
+  python3 -m http.server "$FRONTEND_PORT" --bind 127.0.0.1 --directory "$FRONTEND_DIR" >/tmp/gpapi-3ds-frontend.log 2>&1 &
   FRONTEND_PID=$!
 }
 
