@@ -33,7 +33,7 @@
 - [`java/run.sh`](java/run.sh) — builds and runs Cargo/Tomcat.
 - [`java/.env.example`](java/.env.example) — accurate Java env template.
 
-### .NET (ASP.NET Core Minimal API, .NET 9)
+### .NET (ASP.NET Core Minimal API, .NET 10)
 - [`dotnet/Program.cs`](dotnet/Program.cs) — .NET implementation; `GetAccessTokenAsync()`, `GpRequest()`, `GpError()`, `ToMinorUnits()`, `TwoDigitYear()`, and inline `app.MapGet`/`app.MapPost` handlers at line ~108, ~110, ~169, ~259, and ~290 expose the API.
 - [`dotnet/dotnet.csproj`](dotnet/dotnet.csproj) — minimal package manifest.
 - [`dotnet/run.sh`](dotnet/run.sh) — restores packages and starts `dotnet run`.
