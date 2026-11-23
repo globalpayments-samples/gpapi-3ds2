@@ -51,8 +51,13 @@ if (str_starts_with($path, '/api/')) {
     exit;
 }
 
-// Serve static files (index.html etc.) for non-API routes
-return false;
+// This backend serves no files of its own (the frontend is served separately),
+// so anything else is a 404. Never fall through to the built-in server, which
+// would hand out .env, composer files, vendor/ and the PHP sources.
+http_response_code(404);
+header('Content-Type: text/plain; charset=utf-8');
+echo 'Not Found';
+exit;
 
 function notification_page(string $handler, string $data): void
 {

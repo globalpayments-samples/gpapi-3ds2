@@ -11,7 +11,7 @@
 
 ## Repository Structure
 
-### Node.js (Express, Node 18+)
+### Node.js (Express, Node 24+)
 - [`nodejs/auth.js`](nodejs/auth.js) — reference token helper; `generateToken()` and `getAccessToken()` cache OAuth tokens for all GP-API calls.
 - [`nodejs/server.js`](nodejs/server.js) — Node implementation; `gpRequest()`, `toMinorUnits()`, `twoDigitYear()`, and inline route handlers at line ~82, ~90, ~145, ~245, and ~281 implement the public API.
 - [`nodejs/run.sh`](nodejs/run.sh) — installs dependencies and starts `npm start`.
@@ -33,7 +33,7 @@
 - [`java/run.sh`](java/run.sh) — builds and runs Cargo/Tomcat.
 - [`java/.env.example`](java/.env.example) — accurate Java env template.
 
-### .NET (ASP.NET Core Minimal API, .NET 9)
+### .NET (ASP.NET Core Minimal API, .NET 10)
 - [`dotnet/Program.cs`](dotnet/Program.cs) — .NET implementation; `GetAccessTokenAsync()`, `GpRequest()`, `GpError()`, `ToMinorUnits()`, `TwoDigitYear()`, and inline `app.MapGet`/`app.MapPost` handlers at line ~108, ~110, ~169, ~259, and ~290 expose the API.
 - [`dotnet/dotnet.csproj`](dotnet/dotnet.csproj) — minimal package manifest.
 - [`dotnet/run.sh`](dotnet/run.sh) — restores packages and starts `dotnet run`.
@@ -173,6 +173,6 @@ All language implementations expose identical behavior. If you change the reques
 
 - Node.js: `express` ^4.18.2, `dotenv` ^16.3.1
 - PHP: `vlucas/phpdotenv` ^5.5
-- Java: `jackson-databind` 2.17.0, `dotenv-java` 3.0.0, `jakarta.servlet-api` 5.0.0, Cargo Tomcat plugin 1.10.10
+- Java: `jackson-databind` 2.18.11, `dotenv-java` 3.0.0, `jakarta.servlet-api` 5.0.0, Cargo Tomcat plugin 1.10.10
 - .NET: `DotEnv.Net` 3.2.1
 - GP SDK usage: none; every backend calls GP-API directly over HTTP
