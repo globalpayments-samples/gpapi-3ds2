@@ -1,178 +1,97 @@
 # GP-API 3DS2 Sandbox
 
-> Run the GP-API 3DS2 browser authentication flow through direct UCP HTTP calls across Node.js, PHP, Java, and .NET backends.
+> Run the GP-API 3DS2 browser authentication flow with the official Global Payments SDK in Node.js, PHP, Java and .NET backends, behind one shared browser page that tokenizes the card with Hosted Fields.
 
 ## Critical Patterns
 
-1. **Build the access-token secret as `SHA512(nonce + GP_APP_KEY)` and send `X-GP-Version: 2021-03-22`.** `nodejs/auth.js` (`generateToken()`), `php/src/GpApiClient.php` (`generateToken()`), `java/src/main/java/com/globalpayments/example/GpApi3dsServlet.java` (`generateToken()`), and `dotnet/Program.cs` (`GetAccessTokenAsync()`) all post that exact shape to `/ucp/accesstoken`. If the hash formula or version header changes, every downstream 3DS call fails before enrollment starts.
-2. **Strip an `AUT_` prefix before reusing `server_trans_id`.** `php/api/initiate-auth.php`, `php/api/get-auth-result.php`, `java/src/main/java/com/globalpayments/example/GpApi3dsServlet.java` (`handleInitiateAuth()`, `handleGetAuthResult()`), `dotnet/Program.cs` (inline `app.MapPost` handlers, line ~169 and line ~259), and `nodejs/server.js` (inline `app.post` handlers, line ~145 and line ~245) all normalize the ID before re-posting auth data or fetching `/authentications/{id}`.
-3. **Replay the completed 3DS values when authorizing the sale.** Every backend sends `authentication_value`, `server_trans_ref`, `ds_trans_ref`, `eci`, and `message_version` from `/api/get-auth-result` into `/ucp/transactions`; omitting any of them turns the final payment request into a non-3DS sale.
-4. **Use `.env.example` as the setup source, not `.env.sample`.** The checked-in `.env.example` files match the variables the code reads; the parallel `.env.sample` files still contain older placeholder keys and will not boot the 3DS2 flow correctly if copied verbatim.
+1. **Every GP-API call goes through the official SDK.** Each backend builds a `GpApiConfig` from the environment (`sdkConfig()` in `nodejs/gp-sdk.js`, `GpApiClient::sdkConfig()` in PHP, `sdkConfig()` in `GpApi3dsServlet.java`, `SdkConfig()` in `dotnet/Program.cs`), registers it once under the name `gpapi-3ds-sample`, and uses `Secure3dService.checkEnrollment`, `initiateAuthentication` and `getAuthenticationData`, then `CreditCardData.charge` for the sale. There is no hand built `/ucp` request and no manual token code; the SDK creates and caches the access token.
+2. **The Hosted Fields token comes from a second config with `PMT_POST_Create_Single`.** `GET /api/tokenization-config` calls `GpApiService.generateTransactionKey` with the tokenization flag set (permission `PMT_POST_Create_Single`, ten minute expiry) and returns `env`, `accessToken`, `accountName`, `merchantId` (not in Node) and `apiVersion`. The page passes the resulting `PMT_...` id to every later call as `payment_method_id`.
+3. **Keep the full `AUT_` id.** `server_trans_id` from `/api/check-enrollment` goes back unchanged as `server_trans_id` to `/api/initiate-auth` and `/api/get-auth-result`, and as `authentication_id` to `/api/authorize-payment`. The SDK puts it in the `/authentications/{id}/initiate` and `/result` paths and in `payment_method.authentication.id` on the sale.
+4. **The sale attaches 3DS by fetching the authentication again.** `/api/authorize-payment` reads `authentication_id` (or `three_ds.authentication_id`, or `three_ds.server_trans_ref`), calls `getAuthenticationData` for it and sets the result as the card's `threeDSecure` before charging. The other `three_ds` fields the page sends are not used.
+5. **Final statuses are `SUCCESS_AUTHENTICATED` and `SUCCESS_ATTEMPT_MADE`.** The page only charges after one of those, and `test-all-cards.sh` uses the same pair. `CHALLENGE_REQUIRED` opens the ACS challenge through `globalpayments-3ds`; `AVAILABLE` after initiate means the method step has not finished and the page stops.
+6. **Use `.env.example`, not `.env.sample`.** The `.env.example` files hold the variables the code reads. The `.env.sample` files are older and use other names.
 
 ## Repository Structure
 
-### Node.js (Express, Node 24+)
-- [`nodejs/auth.js`](nodejs/auth.js) — reference token helper; `generateToken()` and `getAccessToken()` cache OAuth tokens for all GP-API calls.
-- [`nodejs/server.js`](nodejs/server.js) — Node implementation; `gpRequest()`, `toMinorUnits()`, `twoDigitYear()`, and inline route handlers at line ~82, ~90, ~145, ~245, and ~281 implement the public API.
-- [`nodejs/run.sh`](nodejs/run.sh) — installs dependencies and starts `npm start`.
-- [`nodejs/.env.example`](nodejs/.env.example) — accurate Node env template.
+### Node.js (Express, Node 24)
+- [`nodejs/server.js`](nodejs/server.js): routes, CORS for `FRONTEND_ORIGIN`, rate limits on `/api` and the callbacks, error mapping, notification pages
+- [`nodejs/gp-sdk.js`](nodejs/gp-sdk.js): SDK config, `hostedFieldsToken()`, `checkEnrollment()`, `initiateAuthentication()`, `getAuthenticationData()`, `charge()` and the `map*` response helpers
+- [`nodejs/package.json`](nodejs/package.json): `globalpayments-api` 3.10, `express` 4.18, `express-rate-limit` 7.5, `escape-html`, `dotenv`
 
-### PHP (CLI server, PHP 8.2.35+, 8.3.36+, 8.4.27+, or 8.5.12+)
-- [`php/src/GpApiClient.php`](php/src/GpApiClient.php) — PHP reference client; `getAccessToken()`, `generateToken()`, `request()`, `toMinorUnits()`, and `errorResponse()` wrap direct UCP calls.
-- [`php/router.php`](php/router.php) — request dispatcher for all five public routes.
-- [`php/api/check-enrollment.php`](php/api/check-enrollment.php) — enrollment request and method-data response.
-- [`php/api/initiate-auth.php`](php/api/initiate-auth.php) — browser-data auth request and ACS challenge handoff.
-- [`php/api/get-auth-result.php`](php/api/get-auth-result.php) — final authentication lookup.
-- [`php/api/authorize-payment.php`](php/api/authorize-payment.php) — `/transactions` sale using returned 3DS fields.
-- [`php/run.sh`](php/run.sh) — convenience launcher; if you need routed `/api/*` requests outside Docker, follow the README command with `router.php`.
-- [`php/config.php`](php/config.php) and [`php/process-payment.php`](php/process-payment.php) — legacy Portico/tokenization files; they are not routed by `router.php`.
+### PHP (built-in server, PHP 8.2.35+, 8.3.36+, 8.4.27+ or 8.5.12+)
+- [`php/router.php`](php/router.php): routes the six API paths and both callbacks, returns 404 for anything else so `.env`, composer files and `vendor/` are never served
+- [`php/api/`](php/api/): one file per route (`health.php`, `tokenization-config.php`, `check-enrollment.php`, `initiate-auth.php`, `get-auth-result.php`, `authorize-payment.php`)
+- [`php/src/GpApiClient.php`](php/src/GpApiClient.php): SDK config and calls, input mapping, `map*` helpers, JSON responses
+- [`php/composer.json`](php/composer.json): `globalpayments/php-sdk` 13.3, `vlucas/phpdotenv` 5.5
 
-### Java (Servlet + embedded Tomcat/Cargo, Java 21)
-- [`java/src/main/java/com/globalpayments/example/GpApi3dsServlet.java`](java/src/main/java/com/globalpayments/example/GpApi3dsServlet.java) — Java reference implementation; `handleCheckEnrollment()`, `handleInitiateAuth()`, `handleGetAuthResult()`, `handleAuthorizePayment()`, `gpRequest()`, `getAccessToken()`, and `generateToken()` cover the full flow.
-- [`java/pom.xml`](java/pom.xml) — dependency manifest plus Cargo/Tomcat port configuration.
-- [`java/run.sh`](java/run.sh) — builds and runs Cargo/Tomcat.
-- [`java/.env.example`](java/.env.example) — accurate Java env template.
+### Java (Jakarta Servlet on Tomcat through Cargo, Java 21)
+- [`java/src/main/java/com/globalpayments/example/GpApi3dsServlet.java`](java/src/main/java/com/globalpayments/example/GpApi3dsServlet.java): every route, `sdkConfig()`, `handleCheckEnrollment()`, `handleInitiateAuth()`, `handleGetAuthResult()`, `handleAuthorizePayment()`, notification pages
+- [`java/pom.xml`](java/pom.xml): `globalpayments-sdk` 15.1.14, Jackson 2.18.11, `dotenv-java` 3.0.0, Jakarta Servlet 5.0.0, Cargo 1.10.10; Cargo listens on `gpapi.cargo.port` (8004)
 
-### .NET (ASP.NET Core Minimal API, .NET 10)
-- [`dotnet/Program.cs`](dotnet/Program.cs) — .NET implementation; `GetAccessTokenAsync()`, `GpRequest()`, `GpError()`, `ToMinorUnits()`, `TwoDigitYear()`, and inline `app.MapGet`/`app.MapPost` handlers at line ~108, ~110, ~169, ~259, and ~290 expose the API.
-- [`dotnet/dotnet.csproj`](dotnet/dotnet.csproj) — minimal package manifest.
-- [`dotnet/run.sh`](dotnet/run.sh) — restores packages and starts `dotnet run`.
-- [`dotnet/.env.example`](dotnet/.env.example) — accurate .NET env template.
+### .NET (ASP.NET Core minimal API, .NET 10)
+- [`dotnet/Program.cs`](dotnet/Program.cs): every route, `SdkConfig()`, `PaymentMethod()`, `BrowserDataFrom()`, `Map*` helpers, `SdkError()`, notification pages; listens on `GP_SAMPLE_PORT`, then `PORT`, then 8080
+- [`dotnet/dotnet.csproj`](dotnet/dotnet.csproj): `GlobalPayments.Api` 11.0.1, `DotEnv.Net` 3.2.1
 
 ### Shared
-- [`README.md`](README.md) — runtime matrix, sandbox caveats, and test-card overview.
-- [`index.html`](index.html) — shared browser UI; `backendUrl()`, `checkHealth()`, `api()`, `runMethodUrl()`, `openAcsModal()`, and `runFlow()` drive the 3DS2 browser flow.
-- [`docker-compose.yml`](docker-compose.yml) — multi-service launcher exposing frontend `:8000`, Node `:8001`, PHP `:8003`, Java `:8004`, and .NET `:8006`.
-- [`test-all-cards.sh`](test-all-cards.sh) — CLI smoke test for `/api/health`, `/api/check-enrollment`, and `/api/initiate-auth` only; browser-only steps remain unverified.
+- [`index.html`](index.html): the only copy of the page; served on its own (port 8000) and talks to the backend picked in its dropdown. `initHostedFields()`, `runFlow()`, `runApiFlow()`, `runMethodUrl()` and `openAcsModal()` drive the flow, and a raw card diagnostic mode skips Hosted Fields
+- [`run.sh`](run.sh): `check`, `setup`, `dev <backend>`, `smoke <backend|all>` and `docker` helpers
+- [`test-all-cards.sh`](test-all-cards.sh): CLI smoke test with raw card data: health, tokenization config, enrollment, initiate, auth result and a sale for every card that reaches a final status
+- [`docker-compose.yml`](docker-compose.yml): frontend `:8000`, Node `:3001`, PHP `:8003`, Java `:8004`, .NET `:8006`
 
 ## API Surface
 
 | Method | Path | Purpose |
 |--------|------|---------|
-| GET | `/api/health` | Return backend name and readiness. |
-| POST | `/api/check-enrollment` | Create the initial `/authentications` request and return enrollment plus 3DS method data. |
-| POST | `/api/initiate-auth` | Submit browser data, card details, and order data to continue authentication. |
-| POST | `/api/get-auth-result` | Fetch the completed authentication result for a `server_trans_id`. |
-| POST | `/api/authorize-payment` | Submit a `SALE` to `/ucp/transactions` using the completed 3DS fields. |
+| GET | `/api/health` | `{"status":"ok","backend":"...","version":"1.0.0"}`, Node, Java and .NET also return `sdk` |
+| GET | `/api/tokenization-config` | Hosted Fields access token and account details |
+| POST | `/api/check-enrollment` | `payment_method_id` (or raw card fields); returns `server_trans_id`, `enrolled`, `message_version`, `method_url`, `method_data`, `server_trans_ref` |
+| POST | `/api/initiate-auth` | `server_trans_id`, `message_version`, `method_url_completion`, `browser_data`, `order`; returns `status`, the ACS fields and, for `CHALLENGE_REQUIRED`, a `challenge` object with `requestUrl` and `encodedChallengeRequest` |
+| POST | `/api/get-auth-result` | `server_trans_id`; returns `status`, `eci`, `authentication_value`, `ds_trans_ref`, `message_version` |
+| POST | `/api/authorize-payment` | `payment_method_id`, `amount`, `currency`, `authentication_id`; returns `transaction_id`, `status`, `result_code`, plus `amount` and `currency` in Node, PHP and Java |
+| GET, POST | `/3ds-method-notification`, `/3ds-challenge-notification` | callback pages that hand the result to `globalpayments-3ds` in the parent page at `FRONTEND_ORIGIN` |
 
-All four language implementations expose the same five routes.
+Responses are `{"success":true,"data":{...},"raw":{...}}` or `{"success":false,"error":"...","raw":{...}}`. The values in `data` come from the SDK of each language, so `result_code` is `SUCCESS` in Node and PHP and `00` in Java and .NET.
 
 ## Environment Variables
 
 ```bash
-GP_APP_ID=your_app_id_here                         # GP-API application ID for /ucp/accesstoken
-GP_APP_KEY=your_app_key_here                       # GP-API application key hashed into the token secret
-GP_MERCHANT_ID=MER_your_merchant_id_here           # Merchant ID added to auth payloads when present
-GP_ACCOUNT_ID=TRA_your_account_id_here             # Optional TRA_ account ID for the target channel
-GP_ACCOUNT_NAME=transaction_processing             # Case-sensitive UCP account name
-METHOD_NOTIFICATION_URL=https://developer.globalpayments.com/3ds2/method-notification
-CHALLENGE_NOTIFICATION_URL=https://developer.globalpayments.com/3ds2/challenge-notification
-PORT=3001|8080                                     # Node default 3001; .NET default 8080; PHP launcher also reads this
+GP_APP_ID=your_app_id_here
+GP_APP_KEY=your_app_key_here
+GP_API_ENVIRONMENT=sandbox                 # production switches the SDK to production
+GP_ACCOUNT_NAME=transaction_processing     # must match the portal exactly
+GP_ACCOUNT_ID=                             # TRA_ id of that account, leave blank if unknown
+GP_TOKENIZATION_ACCOUNT_NAME=              # optional, defaults to the one in the token response
+GP_PARTNER_MERCHANT_ID=                    # partner mode only
+GP_COUNTRY=GB                              # optional, defaults to GB
+GP_MERCHANT_CONTACT_URL=                   # optional, defaults to https://developer.globalpay.com/
+METHOD_NOTIFICATION_URL=https://<public-host>/3ds-method-notification
+CHALLENGE_NOTIFICATION_URL=https://<public-host>/3ds-challenge-notification   # must be HTTPS
+FRONTEND_ORIGIN=http://localhost:8000
+PORT=3001                                  # Node; PHP run.sh also reads PORT; .NET reads GP_SAMPLE_PORT or PORT
 ```
 
-Use each language's `.env.example` as the source of truth. Node falls back to `3001` in `nodejs/server.js`, .NET falls back to `8080` in `dotnet/Program.cs`, Java stays on Cargo port `8080` from `java/pom.xml`, and PHP's effective port comes from the command you run (`php/run.sh` defaults to `8000`, while the README's routed example uses `8080`).
+Each backend reads its own `<language>/.env`. A placeholder left in `GP_ACCOUNT_ID` is sent to GP-API as is, so clear it when there is no real `TRA_` id.
 
-## Test Cards / Sandbox Credentials
+## Test Cards
 
-| Value | Purpose |
-|---|---|
-| `4263970000005262` | GP-API frictionless Visa |
-| `5425230000004415` | GP-API frictionless Mastercard |
-| `4012001037141112` | Challenge-required Visa |
-| `5114610000004778` | Challenge-required Mastercard |
-| `4012001036853337` | Authentication-failed Visa |
-| `4012001036273338` | Unavailable / not-enrolled Visa |
-| `12/2026`, `CVV 123` | Shared expiry and CVV for all sandbox cards |
-
-Get sandbox app and merchant credentials from https://developer.globalpayments.com/.
-
-## API Request Shape
-
-- `POST https://apis.sandbox.globalpay.com/ucp/accesstoken` — send JSON with `app_id`, `nonce`, `secret`, and `grant_type=client_credentials`, plus `X-GP-Version: 2021-03-22`.
-- `secret` — hex SHA-512 of `nonce + GP_APP_KEY`; there is no separator and no merchant ID in the token request.
-- `three_ds.source=BROWSER` and `payment_method.entry_mode=ECOM` — fixed across enrollment, initiate-auth, and authorize-payment requests.
-- `three_ds.method_url_completion=UNAVAILABLE` — the headless smoke test uses this because it cannot run the browser method callback.
-- `payer.billing_address.country=826` — numeric ISO code, not `GB`.
-- `POST /ucp/transactions` — must replay `authentication_value`, `server_trans_ref`, `ds_trans_ref`, `eci`, and `message_version` from the completed auth result.
-
-## Architecture Summary
-
-**Browser flow:** `index.html` → selected backend `/api/check-enrollment` → optional method URL / ACS challenge → `/api/initiate-auth` → `/api/get-auth-result` → `/api/authorize-payment`.
-**Backend flow:** route handler → token helper/cache → direct GP-API UCP request → normalized JSON back to the frontend.
-**CLI smoke test:** `test-all-cards.sh` → `/api/health` + `/api/check-enrollment` + `/api/initiate-auth`; challenge completion and final auth values still require a browser.
+Expiry `12/2026`, CVV `123`. The README table has the expected results. Attempted authentication: `4222000005218627` (`SUCCESS_ATTEMPT_MADE`, ECI 06).
 
 ## Security Notes
 
-This is demo code. Every backend enables permissive CORS, returns raw GP-API payloads to the browser, hardcodes sandbox payer/address defaults, and skips application-level auth and secret-manager integration. PHP also caches tokens in a local file instead of protected storage.
+Demo code. CORS is limited to `FRONTEND_ORIGIN` but there is no authentication on the API routes, raw SDK objects go back to the browser under `raw`, payer and address data is hardcoded, and credentials live in `.env` files. The callback pages send a CSP with a per request nonce and only accept base64 payloads.
 
 ## How to Run
 
 ```bash
-# Recommended: all services together
-cd /path/to/gpapi-3ds2
-cp nodejs/.env.example nodejs/.env
-cp php/.env.example php/.env
-cp java/.env.example java/.env
-cp dotnet/.env.example dotnet/.env
-docker compose up --build
-
-# Individual backends
-cd nodejs && ./run.sh                         # Node.js -> http://localhost:3001
-cd java && ./run.sh                           # Java -> http://localhost:8080 (host 8004 via Docker)
-cd dotnet && ./run.sh                         # .NET -> http://localhost:8080
-cd php && PORT=8080 ./run.sh
+cp nodejs/.env.example nodejs/.env    # same for php, java, dotnet
+./run.sh setup node
+./run.sh dev node                     # page on :8000, backend on its port
+./run.sh smoke all                    # test-all-cards.sh against each backend
+./run.sh docker up                    # all services from docker-compose.yml
 ```
 
-Use a real browser for the full 3DS2 flow. The CLI smoke test cannot execute the method iframe or ACS challenge.
-
-## How to Verify
-
-```bash
-BASE=http://localhost:3001
-
-# Health
-curl "$BASE/api/health"
-# Expected: {"status":"ok","backend":"nodejs|php|java|dotnet","version":"1.0.0"}
-
-# Enrollment
-curl -X POST "$BASE/api/check-enrollment" \
-  -H "Content-Type: application/json" \
-  -d '{"card_number":"4263970000005262","exp_month":"12","exp_year":"2026"}'
-# Expected: {"success":true,"data":{"server_trans_id":"AUT_...","enrolled":"ENROLLED",...}}
-
-# Initiate auth (replace SERVER_TRANS_ID with the previous response value)
-curl -X POST "$BASE/api/initiate-auth" \
-  -H "Content-Type: application/json" \
-  -d '{"server_trans_id":"SERVER_TRANS_ID","message_version":"2.2.0","method_url_completion":"UNAVAILABLE","card_number":"4263970000005262","exp_month":"12","exp_year":"2026","cardholder_name":"Test User","browser_data":{"accept_header":"text/html","color_depth":24,"ip":"123.123.123.123","java_enabled":false,"javascript_enabled":true,"language":"en-GB","screen_height":1080,"screen_width":1920,"challenge_window_size":"FULL_SCREEN","timezone":"0","user_agent":"curl-test"},"order":{"amount":"10.00","currency":"GBP"}}'
-# Expected: {"success":true,"data":{"status":"AVAILABLE",...}}
-
-# Auth result (use the same SERVER_TRANS_ID after a real browser challenge)
-curl -X POST "$BASE/api/get-auth-result" \
-  -H "Content-Type: application/json" \
-  -d '{"server_trans_id":"SERVER_TRANS_ID"}'
-# Expected after browser completion: {"success":true,"data":{"eci":"...","authentication_value":"...",...}}
-
-# Authorize payment (requires 3DS fields returned by /api/get-auth-result)
-curl -X POST "$BASE/api/authorize-payment" \
-  -H "Content-Type: application/json" \
-  -d '{"card_number":"4263970000005262","exp_month":"12","exp_year":"2026","cvn":"123","amount":"10.00","currency":"GBP","three_ds":{"authentication_value":"AUTH_VALUE","server_trans_ref":"SERVER_TRANS_REF","ds_trans_ref":"DS_TRANS_REF","eci":"05","message_version":"2.2.0"}}'
-# Expected after a completed browser flow: {"success":true,"data":{"transaction_id":"TRN_...","status":"CAPTURED|FUNDED|DECLINED",...}}
-
-# Headless smoke test for all cards
-./test-all-cards.sh 3001 nodejs
-# Expected: health + enrollment + initiate-auth pass; browser-only steps remain skipped
-```
-
-A real browser is required to run the method iframe and ACS challenge. Without that browser step, `/api/get-auth-result` and `/api/authorize-payment` will not return a fully authenticated 3DS result.
+The full browser flow needs both notification URLs on a public HTTPS host. The smoke test does not run the method iframe or the ACS challenge.
 
 ## Making Changes
 
-All language implementations expose identical behavior. If you change the request or response contract in one backend, replicate it in Node.js, PHP, Java, and .NET in separate commits. Treat `docker-compose.yml`, `README.md`, `test-all-cards.sh`, and the root `index.html` as shared files, and remember that frontend copies also exist in `nodejs/index.html`, `php/index.html`, `java/src/main/webapp/index.html`, and `dotnet/wwwroot/index.html`. This repo implements only four languages today; do not add a new language folder without explicit instruction.
-
-## SDK Versions
-
-- Node.js: `express` ^4.18.2, `dotenv` ^16.3.1
-- PHP: `vlucas/phpdotenv` ^5.5
-- Java: `jackson-databind` 2.18.11, `dotenv-java` 3.0.0, `jakarta.servlet-api` 5.0.0, Cargo Tomcat plugin 1.10.10
-- .NET: `DotEnv.Net` 3.2.1
-- GP SDK usage: none; every backend calls GP-API directly over HTTP
+All four backends expose the same routes and request fields. A change to one goes into all four, each language in its own commit. `index.html`, `run.sh`, `test-all-cards.sh` and `docker-compose.yml` are shared. Do not add a new language folder without being asked.
