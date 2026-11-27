@@ -1077,7 +1077,7 @@ async function runApiFlow({ payment_method_id = null, token_raw = null }) {
     // ── Step 5: Get Auth Result ────────────────────────────────────────────
     setStep(5, 'active');
     let r5;
-    const initiateHasFinalAuth = ['SUCCESS_AUTHENTICATED', 'ATTEMPT_ACKNOWLEDGED'].includes(r3.data.status)
+    const initiateHasFinalAuth = ['SUCCESS_AUTHENTICATED', 'SUCCESS_ATTEMPT_MADE'].includes(r3.data.status)
       && (r3.data.authentication_value || r3.data.eci);
 
     if (initiateHasFinalAuth) {
@@ -1113,7 +1113,7 @@ async function runApiFlow({ payment_method_id = null, token_raw = null }) {
       return;
     }
 
-    const authOk = ['SUCCESS_AUTHENTICATED', 'ATTEMPT_ACKNOWLEDGED'].includes(r5.data.status);
+    const authOk = ['SUCCESS_AUTHENTICATED', 'SUCCESS_ATTEMPT_MADE'].includes(r5.data.status);
     showResult(5, `
       <dl>
         <dt>Status</dt><dd>${r5.data.status}</dd>
