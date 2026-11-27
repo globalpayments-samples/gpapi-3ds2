@@ -48,7 +48,7 @@ is_true() {
 }
 
 is_final_auth() {
-  [ "$1" = "SUCCESS_AUTHENTICATED" ] || [ "$1" = "ATTEMPT_ACKNOWLEDGED" ]
+  [ "$1" = "SUCCESS_AUTHENTICATED" ] || [ "$1" = "SUCCESS_ATTEMPT_MADE" ]
 }
 
 # ── health check ─────────────────────────────────────────────────────────────
@@ -250,6 +250,7 @@ run_card_test() {
 
 run_card_test "Frictionless Visa"        "4263970000005262" "ENROLLED"
 run_card_test "Frictionless Mastercard"  "5425230000004415" "ENROLLED"
+run_card_test "Attempted Visa"           "4222000005218627" "ENROLLED"
 run_card_test "Challenge Visa"           "4012001037141112" "ENROLLED"
 run_card_test "Challenge Mastercard"     "5114610000004778" "ENROLLED"
 run_card_test "Auth Failed Visa"         "4012001036853337" "NOT_ENROLLED"

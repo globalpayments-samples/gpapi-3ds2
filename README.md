@@ -148,6 +148,7 @@ Use expiry `12/2026` and CVV `123`.
 | --- | --- | --- |
 | `4263970000005262` | Frictionless success | `05` |
 | `5425230000004415` | Frictionless success | `02` |
+| `4222000005218627` | Authentication attempted (`SUCCESS_ATTEMPT_MADE`), payment still goes ahead | `06` |
 | `4012001037141112` | Challenge required | |
 | `5114610000004778` | Challenge or issuer decline path | |
 | `4012001036853337` | Not enrolled / auth failed path | `07` |
